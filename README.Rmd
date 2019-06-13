@@ -1,0 +1,31 @@
+---
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "man/figures/README-",
+  out.width = "100%"
+)
+```
+
+# cojam
+
+Multi-variant colocalisation with summary genetic association data.
+
+## Installation
+
+You can install cojam from [GitHub](https://github.com/) with:
+
+```{r gh-installation, eval = FALSE}
+# install.packages("devtools")
+devtools::install_github("simisc/cojam")
+```
+
+## Example
+
+To do.
