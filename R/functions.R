@@ -46,7 +46,7 @@ jam_model_table <- function(jamres) {
         dplyr::group_by_all() %>%
         dplyr::summarise(postProb = n()) %>%
         dplyr::ungroup() %>%
-        dplyr::arrange(desc(postProb)) %>%
+        dplyr::arrange(dplyr::desc(postProb)) %>%
         dplyr::mutate(
             postProb = postProb / sum(postProb),
             # express as probabilties
@@ -64,7 +64,7 @@ jam_model_table <- function(jamres) {
             # Normalise posterior:
             logPost  = logPost - logsum(logPost),
             estProb  = exp(logPost),
-            modelRank = row_number()
+            modelRank = dplyr::row_number()
         )
 
     attr(tab, "vars") <- msp$Variables
@@ -135,12 +135,14 @@ cojam <- function(jam_arg1, jam_arg2) {
     jam_res1 <- do.call(JAM, jam_arg1)
     jam_res2 <- do.call(JAM, jam_arg2)
 
-    coloc_res <- jam_model_grid(jam_res1, jam_res2)
+    res <- jam_model_grid(jam_res1, jam_res2)
 
     fillertab <- tibble::tibble(hypoth = 0:4)
+    # in case res does not visit some hypoth
+    # better way of doing this?
 
     fillertab %>%
-        dplyr::full_join(coloc_res) %>%
+        dplyr::full_join(res) %>%
         dplyr::group_by(hypoth) %>%
         dplyr::summarise(
             prior_indep = sum(exp(logPrior_indep), na.rm = TRUE),
@@ -205,12 +207,9 @@ transform_beta <- function(logistic_beta,
                            n_total) {
     p_cases <- n_cases / n_total
     var_cases <- p_cases * (1 - p_cases)
-    z <-
-        logistic_beta / (logistic_se * sqrt(n_total)) # infer z-scores
-    b <-
-        z / snp_sd # divide standardised linear effects by SNP SD to get allelic effects
-    b <-
-        b * sqrt(var_cases) # multiply by trait SD for effect on trait scale
+    z <- logistic_beta / (logistic_se * sqrt(n_total)) # infer z-scores
+    b <- z / snp_sd # divide standardised linear effects by SNP SD to get allelic effects
+    b <- b * sqrt(var_cases) # multiply by trait SD for effect on trait scale
     return(b)
 }
 
@@ -218,6 +217,11 @@ make_extra_args_InvGammaPrior <- function(n_cases,
                                           n_total,
                                           n_prior = 1,
                                           version_2 = TRUE) {
+
+    # Called this list extra_args_InvGammaPrior in clean-for-jam.R
+    # Pass this list to JAM via the argument 'extra.arguments='
+    # New version Paul sent by email...
+
     p_cases <- n_cases / n_total
     var_cases <- p_cases * (1 - p_cases)
 
