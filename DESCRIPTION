@@ -2,10 +2,11 @@ Package: cojam
 Type: Package
 Title: Multi-variant colocalisation with summary genetic association data
 Version: 0.1.0
-Author: Simon Schoenbuchner
+Authors@R: person("Simon", "Schoenbuchner", email = "sms86@cam.ac.uk",
+  role = c("aut", "cre"))
 Description: More about what it does (maybe more than one line)
     Use four spaces when indenting paragraphs within the Description.
-License: GPL-3
+License: GPL-3 + file LICENSE
 Encoding: UTF-8
 LazyData: true
 Imports: 
@@ -16,3 +17,4 @@ Imports:
     reshape2 (>= 1.4.3),
     ggplot2 (>= 3.1.1),
     stringr (>= 1.4.0)
+Remotes: github::pjnewcombe/R2BGLiMS
