@@ -16,3 +16,4 @@ Imports:
     reshape2 (>= 1.4.3),
     ggplot2 (>= 3.1.1),
     stringr (>= 1.4.0)
+Remotes: github::pjnewcombe/R2BGLiMS
