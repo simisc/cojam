@@ -339,7 +339,7 @@ jam_plot <- function(jam_model,
                 `3` = "Both"
             )
         ) %>%
-        dplyr::gather(key, value, post_prob, neglogp)
+        tidyr::gather(key, value, post_prob, neglogp)
 
     if (colours) {
         outplot <-
