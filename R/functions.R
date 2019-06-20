@@ -152,37 +152,64 @@ cojam <- function(jam_arg1, jam_arg2) {
         )
 }
 
-prune_genotypes <- function(genotypes, threshold = 0.95) {
-    threshold <- abs(threshold)
+# prune_genotypes <- function(genotypes, threshold = 0.95) {
+#     threshold <- abs(threshold)
+#
+#     gen <- na.omit(genotypes)
+#     gencor <- cor(gen)
+#     # gencor <- cor(gen, use = "complete.obs")
+#
+#     abscor <- abs(gencor)
+#     abstri <- abscor
+#     abstri[lower.tri(abstri, diag = TRUE)] <- NA
+#     maxcor <- max(abstri, na.rm = TRUE)
+#     avgcor <- apply(abscor, 1, mean, na.rm = TRUE)
+#     idx_exclude <- rep(FALSE, length(avgcor))
+#
+#     print(sprintf("Initial maximum corr: %.2f", maxcor))
+#     while (maxcor > threshold) {
+#         mxcr_idx <- c(which(abstri == maxcor, arr.ind = TRUE))
+#         mxcr_snp <- names(gen)[mxcr_idx]
+#         mxcr_avg <- avgcor[mxcr_snp]
+#         # which.max returns index of first max
+#         idx_exclude[mxcr_idx[which.max(mxcr_avg)]] <- TRUE
+#         abscor[idx_exclude, ] <- NA
+#         abscor[, idx_exclude] <- NA
+#         abstri[idx_exclude, ] <- NA
+#         abstri[, idx_exclude] <- NA
+#         maxcor <- max(abstri, na.rm = TRUE)
+#         avgcor <- apply(abscor, 1, mean, na.rm = TRUE)
+#         print(maxcor)
+#     }
+#
+#     genotypes[, !idx_exclude]
+# }
 
-    gen <- na.omit(genotypes)
-    gencor <- cor(gen)
-    # gencor <- cor(gen, use = "complete.obs")
+prune_genotypes <- function(genotypes, threshold = 0.975) {
 
-    abscor <- abs(gencor)
-    abstri <- abscor
-    abstri[lower.tri(abstri, diag = TRUE)] <- NA
-    maxcor <- max(abstri, na.rm = TRUE)
-    avgcor <- apply(abscor, 1, mean, na.rm = TRUE)
-    idx_exclude <- rep(FALSE, length(avgcor))
+   genotypes <- prune_qr(genotypes) # First remove colinear SNPs
 
-    print(sprintf("Initial maximum corr: %.2f", maxcor))
-    while (maxcor > threshold) {
-        mxcr_idx <- c(which(abstri == maxcor, arr.ind = TRUE))
-        mxcr_snp <- names(gen)[mxcr_idx]
-        mxcr_avg <- avgcor[mxcr_snp]
-        # which.max returns index of first max
-        idx_exclude[mxcr_idx[which.max(mxcr_avg)]] <- TRUE
-        abscor[idx_exclude, ] <- NA
-        abscor[, idx_exclude] <- NA
-        abstri[idx_exclude, ] <- NA
-        abstri[, idx_exclude] <- NA
-        maxcor <- max(abstri, na.rm = TRUE)
-        avgcor <- apply(abscor, 1, mean, na.rm = TRUE)
-        print(maxcor)
+    cormat <- abs(cor(genotypes, use = "pairwise.complete.obs"))
+    cormat[cormat > abs(threshold)] <- NA
+    diag(cormat) <- 1
+    remove_idx <- logical(nrow(cormat))
+
+    while(any(is.na(cormat))) {
+
+        remove_snp <- tibble(
+            num_NAs = apply(is.na(cormat), 1, sum, na.rm = TRUE),
+            avg_cor = apply(cormat, 1, mean, na.rm = TRUE)
+        ) %>%
+            mutate(index = row_number()) %>%
+            filter(num_NAs == max(num_NAs)) %>%
+            filter(avg_cor == max(avg_cor)) %>%
+            "$"(index)
+
+        cormat <- cormat[-remove_snp, -remove_snp]
+        remove_idx[remove_snp] <- TRUE
     }
 
-    genotypes[, !idx_exclude]
+    genotypes[, !remove_idx, drop = FALSE]
 }
 
 plot_cormat <- function(M) {
@@ -251,6 +278,13 @@ jam_wrap <- function(marginal.betas,
                      thinning_interval = NULL,
                      prior_b = length(snp_names),
                      list_args = FALSE) {
+
+    ######################################################
+    ## Update this: calculate variance, etc.            ##
+    ## How keep it general enough for eQTL?             ##
+    ## Two functions: then can build in transform_betas ##
+    ######################################################
+
     if (is.null(names(marginal.betas))) {
         message("Assuming that marginal.betas and snp_names are in the same order.")
         names(marginal.betas) <- snp_names
