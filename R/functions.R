@@ -71,8 +71,10 @@ jam_model_table <- function(jamres) {
     tab
 }
 
-jam_model_grid <- function(jamres1, jamres2, vars = NULL,
-                           priors = list(lambda1 = 1, lambda2 = 1, odds_colocalisation = 100)) {
+jam_model_grid <- function(jamres1,
+                           jamres2,
+                           priors = list(lambda1 = 1, lambda2 = 1, odds_colocalisation = 100),
+                           vars = NULL) {
 
     tab1 <- jam_model_table(jamres1)
     tab2 <- jam_model_table(jamres2)
@@ -91,7 +93,7 @@ jam_model_grid <- function(jamres1, jamres2, vars = NULL,
     weight3 <- (odds_colocalisation / (odds_colocalisation + 1)) * ((odds_implied_prior + 1) / odds_implied_prior)
     weight4 <- (odds_implied_prior + 1) / (odds_colocalisation + 1)
 
-    print(
+    cat(
         sprintf(
             "Implied odds: %.2f\nWeight 3: %.2f\nWeight 4: %.2f\n",
             odds_implied_prior, weight3, weight4
@@ -145,59 +147,36 @@ jam_model_grid <- function(jamres1, jamres2, vars = NULL,
 
 }
 
-cojam <- function(jam_arg1, jam_arg2) {
+cojam <- function(jam_arg1, jam_arg2, prior_odds = 100, vars = NULL) {
+
+    if(jam_arg1$model.space.prior$a != 1 | jam_arg2$model.space.prior$a != 1) {
+        stop("Model space priors of both JAM calls must be of the form BetaBin(1, b).")
+    }
+
     jam_res1 <- do.call(JAM, jam_arg1)
     jam_res2 <- do.call(JAM, jam_arg2)
 
-    res <- jam_model_grid(jam_res1, jam_res2)
+    lambda1 <- jam_arg1$model.space.prior$b / length(jam_arg1$model.space.prior$Variables)
+    lambda2 <- jam_arg2$model.space.prior$b / length(jam_arg2$model.space.prior$Variables)
 
-    fillertab <- tibble::tibble(hypoth = 0:4)
-    # in case res does not visit some hypoth
-    # better way of doing this?
+    res <- jam_model_grid(jam_res1, jam_res2, vars = vars,
+                          priors = list(lambda1 = lambda1, lambda2 = lambda2, odds_colocalisation = prior_odds))
 
-    fillertab %>%
+    #################################################################
+    ### Table is wrong: only takes prior sum over visited models! ###
+    ### Should calculate the prior, not take it from the MCMC...  ###
+    #################################################################
+
+    tibble::tibble(hypoth = 0:4) %>%
         dplyr::full_join(res) %>%
         dplyr::group_by(hypoth) %>%
         dplyr::summarise(
-            prior_indep = sum(exp(logPrior_indep), na.rm = TRUE),
-            prior_joint = sum(exp(logPrior_joint), na.rm = TRUE),
+            # prior_indep = sum(exp(logPrior_indep), na.rm = TRUE),
+            # prior_joint = sum(exp(logPrior_joint), na.rm = TRUE),
             postprob_indep = sum(estProb_indep, na.rm = TRUE),
             postprob_joint = sum(estProb_joint, na.rm = TRUE)
         )
 }
-
-# prune_genotypes <- function(genotypes, threshold = 0.95) {
-#     threshold <- abs(threshold)
-#
-#     gen <- na.omit(genotypes)
-#     gencor <- cor(gen)
-#     # gencor <- cor(gen, use = "complete.obs")
-#
-#     abscor <- abs(gencor)
-#     abstri <- abscor
-#     abstri[lower.tri(abstri, diag = TRUE)] <- NA
-#     maxcor <- max(abstri, na.rm = TRUE)
-#     avgcor <- apply(abscor, 1, mean, na.rm = TRUE)
-#     idx_exclude <- rep(FALSE, length(avgcor))
-#
-#     print(sprintf("Initial maximum corr: %.2f", maxcor))
-#     while (maxcor > threshold) {
-#         mxcr_idx <- c(which(abstri == maxcor, arr.ind = TRUE))
-#         mxcr_snp <- names(gen)[mxcr_idx]
-#         mxcr_avg <- avgcor[mxcr_snp]
-#         # which.max returns index of first max
-#         idx_exclude[mxcr_idx[which.max(mxcr_avg)]] <- TRUE
-#         abscor[idx_exclude, ] <- NA
-#         abscor[, idx_exclude] <- NA
-#         abstri[idx_exclude, ] <- NA
-#         abstri[, idx_exclude] <- NA
-#         maxcor <- max(abstri, na.rm = TRUE)
-#         avgcor <- apply(abscor, 1, mean, na.rm = TRUE)
-#         print(maxcor)
-#     }
-#
-#     genotypes[, !idx_exclude]
-# }
 
 prune_genotypes <- function(genotypes, threshold = 0.975) {
 
@@ -239,19 +218,6 @@ plot_cormat <- function(M) {
         ggplot2::scale_x_discrete(position = "top") +
         ggplot2::scale_fill_gradient2(limits = c(-1, 1)) +
         ggplot2::coord_fixed()
-}
-
-transform_beta <- function(logistic_beta,
-                           logistic_se,
-                           snp_sd,
-                           n_cases,
-                           n_total) {
-    p_cases <- n_cases / n_total
-    var_cases <- p_cases * (1 - p_cases)
-    z <- logistic_beta / (logistic_se * sqrt(n_total)) # infer z-scores
-    b <- z / snp_sd # divide standardised linear effects by SNP SD to get allelic effects
-    b <- b * sqrt(var_cases) # multiply by trait SD for effect on trait scale
-    return(b)
 }
 
 make_extra_args_InvGammaPrior <- function(n_cases,
