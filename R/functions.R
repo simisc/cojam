@@ -71,7 +71,9 @@ jam_model_table <- function(jamres) {
     tab
 }
 
-jam_model_grid <- function(jamres1, jamres2, vars = NULL) {
+jam_model_grid <- function(jamres1, jamres2, vars = NULL,
+                           priors = list(lambda1 = 1, lambda2 = 1, odds_colocalisation = 100)) {
+
     tab1 <- jam_model_table(jamres1)
     tab2 <- jam_model_table(jamres2)
 
@@ -80,6 +82,21 @@ jam_model_grid <- function(jamres1, jamres2, vars = NULL) {
         v2 <- attr(tab2, "vars")
         vars <- intersect(v1, v2)
     }
+
+    for (i in 1:length(priors)) {
+        assign(names(priors)[i], priors[[i]])
+    }
+
+    odds_implied_prior <- 1000 * (lambda1 / (1 + lambda1)) * (lambda2 / (1 + lambda2))
+    weight3 <- (odds_colocalisation / (odds_colocalisation + 1)) * ((odds_implied_prior + 1) / odds_implied_prior)
+    weight4 <- (odds_implied_prior + 1) / (odds_colocalisation + 1)
+
+    print(
+        sprintf(
+            "Implied odds: %.2f\nWeight 3: %.2f\nWeight 4: %.2f\n",
+            odds_implied_prior, weight3, weight4
+        )
+    )
 
     X <- tcrossprod(as.matrix(tab1[, vars]),
                     as.matrix(tab2[, vars]))
@@ -102,11 +119,8 @@ jam_model_grid <- function(jamres1, jamres2, vars = NULL) {
                 num_coloc == 0 ~ 3,
                 TRUE ~ 4
             ),
-            ###==============================================###
-            ### REWEIGHTING: currently fixed, allow options? ###
-            ###==============================================###
-            reweighting_factor = dplyr::case_when(hypoth == 4 ~ 251 / 101,
-                                                  hypoth == 3 ~ 2510 / 2525,
+            reweighting_factor = dplyr::case_when(hypoth == 4 ~ weight4, # 251 / 101,
+                                                  hypoth == 3 ~ weight3, # 2510 / 2525,
                                                   TRUE ~ 1),
 
             logLike_joint  = logLike_1 + logLike_2,
@@ -267,23 +281,16 @@ make_extra_args_InvGammaPrior <- function(n_cases,
     return(res)
 }
 
-jam_wrap <- function(marginal.betas,
-                     # transformed/linear
+jam_wrap <- function(marginal.betas, # transformed/linear
                      X.ref,
                      snp_names,
                      n,
-                     # Add argument for beta transformation? Would also need SE, etc.
+                     prior_lambda = 1,
                      trait_variance = NULL,
                      inv_gamma_prior = NULL,
                      thinning_interval = NULL,
-                     prior_b = length(snp_names),
+                     prior_b = prior_lambda * length(snp_names),
                      list_args = FALSE) {
-
-    ######################################################
-    ## Update this: calculate variance, etc.            ##
-    ## How keep it general enough for eQTL?             ##
-    ## Two functions: then can build in transform_betas ##
-    ######################################################
 
     if (is.null(names(marginal.betas))) {
         message("Assuming that marginal.betas and snp_names are in the same order.")
@@ -298,6 +305,10 @@ jam_wrap <- function(marginal.betas,
         X.ref = na.omit(X.ref[, snp_names])
     } else {
         stop("Not all snp_names are in names(X.ref)")
+    }
+
+    if (prior_b != prior_lambda * length(snp_names)) {
+        message("Default prior_b was overridden: prior_lambda will be ignored.")
     }
 
     jam_args <- list(
@@ -319,17 +330,6 @@ jam_wrap <- function(marginal.betas,
     } else {
         return(do.call(JAM, jam_args))
     }
-
-    # JAM(marginal.betas = marginal.betas,
-    #     X.ref = X.ref,
-    #     n = n,
-    #     trait.variance = trait_variance,
-    #     model.space.prior = list(a = 1,
-    #                              b = prior_b,
-    #                              Variables = snp_names),
-    #     extra.arguments = inv_gamma_prior,
-    #     thinning.interval = thinning_interval
-    # )
 }
 
 jam_plot <- function(jam_model,
