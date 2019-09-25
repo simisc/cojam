@@ -220,66 +220,63 @@ plot_cormat <- function(M) {
         ggplot2::coord_fixed()
 }
 
-jam_wrap <- function(marginal.betas, # transformed/linear
-                     X.ref,
+jam_wrap <- function(marginal_beta, # _original_ betas (log ORs if binary outcome)
                      snp_names,
+                     ref_genotypes,
                      n,
+                     trait_variance,
+                     binary_outcome = FALSE,
+                     marginal_beta_se = NULL, # only required if binary outcome
                      prior_lambda = 1,
-                     trait_variance = NULL,
-                     binary_outcome_inv_gamma = FALSE,
                      thinning_interval = NULL,
-                     prior_b = prior_lambda * length(snp_names),
                      list_args = FALSE) {
 
-    if (is.null(names(marginal.betas))) {
-        message("Assuming that marginal.betas and snp_names are in the same order.")
-        names(marginal.betas) <- snp_names
-    } else if (all(snp_names %in% names(marginal.betas))) {
-        marginal.betas <- marginal.betas[snp_names]
-    } else {
-        stop("Not all snp_names are in names(marginal.betas)")
-    }
+    names(marginal_beta) <- snp_names
+    variables <- intersect(snp_names, colnames(ref_genotypes)) # Add message if this results in loss of variables...
 
-    if (all(snp_names %in% colnames(X.ref))) {
-        X.ref = na.omit(X.ref[, snp_names])
-    } else {
-        stop("Not all snp_names are in colnames(X.ref)")
-    }
+    marginal_beta <- marginal_beta[variables]
+    ref_genotypes <- ref_genotypes[, variables]
 
-    if (prior_b != prior_lambda * length(snp_names)) {
-        message("Default prior_b was overridden: prior_lambda will be ignored.")
-    }
+    if (binary_outcome) {
 
-    extra_arguments <- if (binary_outcome_inv_gamma) {
+        if (is.null(marginal_beta_se)) {
+            stop("For binary outcomes, supply marginal_beta_se (SEs of the log-ORs)")
+        }
+
         # NB: extra arguments must be named!
-        list(
-            GaussianResidualVarianceInvGammaPrior_a = 2,
-            GaussianResidualVarianceInvGammaPrior_b = trait_variance
+        extra_arguments <- list(GaussianResidualVarianceInvGammaPrior_a = 2,
+                                GaussianResidualVarianceInvGammaPrior_b = trait_variance)
+
+        marginal_beta <- JAM_LogisticToLinearEffects(
+            log.ors = marginal_beta,
+            log.or.ses = marginal_beta_se,
+            snp.genotype.sds = apply(ref_genotypes, 2, sd),
+            n = n,
+            p.cases = trait_variance / (1 + trait_variance)
         )
+
     } else {
-        # Keep default inverse Gamma Prior, a = b = 0.01
-        NULL
+
+        # Keep default inverse Gamma prior, a = b = 0.01
+        extra_arguments <- NULL
+
     }
 
     jam_args <- list(
-        marginal.betas = marginal.betas,
-        X.ref = X.ref,
+        marginal.betas = marginal_beta,
+        X.ref = ref_genotypes,
         n = n,
         trait.variance = trait_variance,
         model.space.prior = list(
             a = 1,
-            b = prior_b,
-            Variables = snp_names
+            b = prior_lambda * length(variables),
+            Variables = variables
         ),
         extra.arguments = extra_arguments,
         thinning.interval = thinning_interval
     )
 
-    if (list_args) {
-        return(jam_args)
-    } else {
-        return(do.call(JAM, jam_args))
-    }
+    if (list_args) return(jam_args) else return(do.call(JAM, jam_args))
 }
 
 jam_plot <- function(jam_model,
@@ -290,6 +287,8 @@ jam_plot <- function(jam_model,
     # To do:
     # take all info from jam_model (recalculate p.values if enough info...?)
     # new argument groups defining which group each SNP is in (names are the SNPs)
+
+    # snp_names <- jam_model@model.space.priors[[1]]$Variables
 
     data <-tibble::tibble(
         SNP = snp_names,
