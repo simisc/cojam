@@ -21,7 +21,7 @@ prune_qr <- function(genotype_matrix) {
     genotype_matrix[, gm_qr$pivot[seq(gm_qr$rank)]]
 }
 
-BetaBinomialProbabilitySpecificModel <- function(k, n, a, b) {
+beta_binom_specific_model <- function(k, n, a, b) {
     # Calculates a Beta-Binomial prior probability for a SPECIFIC model. From Bottolo et al.
     # This is not the prior on a particular dimension (that would required the binomial co-efficient).
     # k dimension of specific model
@@ -52,7 +52,7 @@ jam_model_table <- function(jamres) {
             # express as probabilties
             modelDim = rowSums(.[, msp$Variables]),
             logPrior = log(
-                BetaBinomialProbabilitySpecificModel(
+                beta_binom_specific_model(
                     k = modelDim,
                     n = length(msp$Variables),
                     a = msp$a,
@@ -220,40 +220,13 @@ plot_cormat <- function(M) {
         ggplot2::coord_fixed()
 }
 
-make_extra_args_InvGammaPrior <- function(n_cases,
-                                          n_total,
-                                          n_prior = 1,
-                                          version_2 = TRUE) {
-
-    # Called this list extra_args_InvGammaPrior in clean-for-jam.R
-    # Pass this list to JAM via the argument 'extra.arguments='
-    # New version Paul sent by email...
-
-    p_cases <- n_cases / n_total
-    var_cases <- p_cases * (1 - p_cases)
-
-    if (version_2) {
-        res <- list(
-            GaussianResidualVarianceInvGammaPrior_a = 2,
-            GaussianResidualVarianceInvGammaPrior_b = var_cases
-        )
-    } else {
-        b <- var_cases * (1 + (n_prior - 1) / 2)
-        res <- list(
-            GaussianResidualVarianceInvGammaPrior_a = b / var_cases + 1,
-            GaussianResidualVarianceInvGammaPrior_b = b
-        )
-    }
-    return(res)
-}
-
 jam_wrap <- function(marginal.betas, # transformed/linear
                      X.ref,
                      snp_names,
                      n,
                      prior_lambda = 1,
                      trait_variance = NULL,
-                     inv_gamma_prior = NULL,
+                     binary_outcome_inv_gamma = FALSE,
                      thinning_interval = NULL,
                      prior_b = prior_lambda * length(snp_names),
                      list_args = FALSE) {
@@ -270,11 +243,22 @@ jam_wrap <- function(marginal.betas, # transformed/linear
     if (all(snp_names %in% colnames(X.ref))) {
         X.ref = na.omit(X.ref[, snp_names])
     } else {
-        stop("Not all snp_names are in names(X.ref)")
+        stop("Not all snp_names are in colnames(X.ref)")
     }
 
     if (prior_b != prior_lambda * length(snp_names)) {
         message("Default prior_b was overridden: prior_lambda will be ignored.")
+    }
+
+    extra_arguments <- if (binary_outcome_inv_gamma) {
+        # NB: extra arguments must be named!
+        list(
+            GaussianResidualVarianceInvGammaPrior_a = 2,
+            GaussianResidualVarianceInvGammaPrior_b = trait_variance
+        )
+    } else {
+        # Keep default inverse Gamma Prior, a = b = 0.01
+        NULL
     }
 
     jam_args <- list(
@@ -287,7 +271,7 @@ jam_wrap <- function(marginal.betas, # transformed/linear
             b = prior_b,
             Variables = snp_names
         ),
-        extra.arguments = inv_gamma_prior,
+        extra.arguments = extra_arguments,
         thinning.interval = thinning_interval
     )
 
@@ -301,15 +285,16 @@ jam_wrap <- function(marginal.betas, # transformed/linear
 jam_plot <- function(jam_model,
                      snp_names,
                      univariate_pvalues,
-                     true_signal = NULL,
-                     colours = FALSE) {
-    # true_signal can be:
-    # NULL      SNP with lowest p-value is chosen
-    # character SNP(s) named are chosen
-    # logical   Directly specifies choice of SNP
+                     groups = NULL) {
 
-    data <-
-        tibble::tibble(SNP = snp_names, pvalue = univariate_pvalues) %>%
+    # To do:
+    # take all info from jam_model (recalculate p.values if enough info...?)
+    # new argument groups defining which group each SNP is in (names are the SNPs)
+
+    data <-tibble::tibble(
+        SNP = snp_names,
+        pvalue = univariate_pvalues
+        ) %>%
         dplyr::mutate(neglogp = -log10(pvalue),
                       index = row_number())
 
@@ -328,42 +313,15 @@ jam_plot <- function(jam_model,
         na.omit() %>% # drops alpha, LogLikelihood, ModelSizePartition1 to only keep SNPs
         tibble::tibble(post_prob = ., SNP = names(.)) %>%
         dplyr::inner_join(data) %>%
-        dplyr::mutate(
-            jam_snp = post_prob == max(post_prob),
-            col_code = as.numeric(jam_snp) + 2 * as.numeric(signal),
-            col_code = recode(
-                col_code,
-                `0` = "None",
-                `1` = "JAM",
-                `2` = "Univariate",
-                `3` = "Both"
-            )
-        ) %>%
         tidyr::gather(key, value, post_prob, neglogp)
 
-    if (colours) {
-        outplot <-
-            ggplot2::ggplot(post_prob, aes(x = index, y = value, col = col_code)) +
-            ggplot2::geom_point() +
-            ggplot2::facet_wrap(~ key,
-                                scales = "free_y",
-                                labeller = ggplot2::labeller(
-                                    key = c(neglogp = "Univariate -log10(p)",
-                                            post_prob = "Marginal posterior probability")
-                                ))
-    } else {
-        outplot <- ggplot2::ggplot(post_prob, aes(x = index, y = value)) +
-            ggplot2::geom_point() +
-            ggplot2::facet_wrap(~ key,
-                                scales = "free_y",
-                                labeller = ggplot2::labeller(
-                                    key = c(neglogp = "Univariate -log10(p)",
-                                            post_prob = "Marginal posterior probability")
-                                )) +
-            ggplot2::scale_color_discrete(name = "Top SNP")
-    }
-
-    outplot
+    ggplot2::ggplot(post_prob, aes(x = index, y = value)) +
+        ggplot2::geom_point() +
+        ggplot2::facet_wrap(~ key,
+                            scales = "free_y",
+                            labeller = ggplot2::labeller(
+                                key = c(neglogp = "Univariate -log10(p)",
+                                        post_prob = "Marginal posterior probability")))
 }
 
 complement_DNA <- function(x) {
