@@ -73,17 +73,17 @@ jam_model_table <- function(jamres) {
 
 jam_model_grid <- function(jamres1,
                            jamres2,
-                           priors = list(lambda1 = 1, lambda2 = 1, odds_colocalisation = 100),
-                           vars = NULL) {
+                           priors = list(lambda1 = 1, lambda2 = 1, odds_colocalisation = 100)) {
+
+    v1 <- jamres1@model.space.priors[[1]]$Variables
+    v2 <- jamres2@model.space.priors[[1]]$Variables
+
+    if(length(v1) != length(v2) || any(v1 != v2)) {
+        stop("Both JAM calls must use same SNPs")
+    }
 
     tab1 <- jam_model_table(jamres1)
     tab2 <- jam_model_table(jamres2)
-
-    if (is.null(vars)) {
-        v1 <- attr(tab1, "vars")
-        v2 <- attr(tab2, "vars")
-        vars <- intersect(v1, v2)
-    }
 
     for (i in 1:length(priors)) {
         assign(names(priors)[i], priors[[i]])
@@ -100,8 +100,7 @@ jam_model_grid <- function(jamres1,
         )
     )
 
-    X <- tcrossprod(as.matrix(tab1[, vars]),
-                    as.matrix(tab2[, vars]))
+    X <- tcrossprod(as.matrix(tab1), as.matrix(tab2))
 
     names(tab1) <- sprintf("%s_1", names(tab1))
     names(tab2) <- sprintf("%s_2", names(tab2))
@@ -147,10 +146,37 @@ jam_model_grid <- function(jamres1,
 
 }
 
-cojam <- function(jam_arg1, jam_arg2, prior_odds = 100, vars = NULL) {
+subset_jam_args <- function(jam_args, vars) {
+
+    if(!all(vars %in% jam_args$model.space.prior$Variables)) {
+        stop("Not all vars are in the existing JAM calls.")
+    }
+
+    jam_args$marginal.betas <- jam_args$marginal.betas[vars]
+    jam_args$X.ref <- jam_args$X.ref[, vars]
+    jam_args$model.space.prior$b <- jam_args$model.space.prior$b * length(vars) / length(jam_args$model.space.prior$Variables)
+    jam_args$model.space.prior$Variables <- vars
+
+    jam_args
+}
+
+cojam <- function(jam_arg1, jam_arg2, prior_odds = 100) {
 
     if(jam_arg1$model.space.prior$a != 1 | jam_arg2$model.space.prior$a != 1) {
         stop("Model space priors of both JAM calls must be of the form BetaBin(1, b).")
+    }
+
+    v1 <- names(jam_arg1$marginal.betas)
+    v2 <- names(jam_arg2$marginal.betas)
+
+    if(length(v1) != length(v2) || any(v1 != v2)) {
+
+        vars <- intersect(v1, v2)
+
+        warning(sprintf("Both JAM calls must use same SNPs\nKeeping intersection: %i SNPs", length(vars)))
+
+        jam_arg1 <- subset_jam_args(jam_arg1, vars)
+        jam_arg2 <- subset_jam_args(jam_arg2, vars)
     }
 
     jam_res1 <- do.call(JAM, jam_arg1)
@@ -159,7 +185,7 @@ cojam <- function(jam_arg1, jam_arg2, prior_odds = 100, vars = NULL) {
     lambda1 <- jam_arg1$model.space.prior$b / length(jam_arg1$model.space.prior$Variables)
     lambda2 <- jam_arg2$model.space.prior$b / length(jam_arg2$model.space.prior$Variables)
 
-    res <- jam_model_grid(jam_res1, jam_res2, vars = vars,
+    res <- jam_model_grid(jam_res1, jam_res2,
                           priors = list(lambda1 = lambda1, lambda2 = lambda2, odds_colocalisation = prior_odds))
 
     #################################################################
@@ -242,6 +268,9 @@ jam_wrap <- function(marginal_beta, # _original_ betas (log ORs if binary outcom
         if (is.null(marginal_beta_se)) {
             stop("For binary outcomes, supply marginal_beta_se (SEs of the log-ORs)")
         }
+
+        names(marginal_beta_se) <- snp_names
+        marginal_beta_se <- marginal_beta_se[variables]
 
         # NB: extra arguments must be named!
         extra_arguments <- list(GaussianResidualVarianceInvGammaPrior_a = 2,
