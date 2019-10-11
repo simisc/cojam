@@ -286,13 +286,9 @@ jam_wrap <- function(marginal_beta, # _original_ betas (log ORs if binary outcom
         extra_arguments <- list(GaussianResidualVarianceInvGammaPrior_a = 2,
                                 GaussianResidualVarianceInvGammaPrior_b = trait_variance)
 
-        marginal_beta_transformed <- JAM_LogisticToLinearEffects(
-            log.ors = marginal_beta,
-            log.or.ses = marginal_beta_se,
-            snp.genotype.sds = apply(ref_genotypes, 2, sd),
-            n = n,
-            p.cases = trait_variance / (1 + trait_variance)
-        )
+        z_score <- (marginal_beta / marginal_beta_se) / sqrt(n)
+
+        marginal_beta_transformed <- z_score * sqrt(var_gwas) / apply(ref_genotypes, 2, sd)
 
     } else {
 
