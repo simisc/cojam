@@ -18,7 +18,7 @@ prune_qr <- function(genotype_matrix) {
     }
 
     gm_qr <- qr(genotype_matrix)
-    genotype_matrix[, gm_qr$pivot[seq(gm_qr$rank)]]
+    genotype_matrix[, gm_qr$pivot[seq_len(gm_qr$rank)]]
 }
 
 beta_binom_specific_model <- function(k, n, a, b) {
@@ -214,31 +214,31 @@ cojam <- function(jam_arg1, jam_arg2, prior_odds = 100) {
          results = list(jam1 = jam_res1, jam2 = jam_res2, grid = res_grid))
 }
 
-prune_genotypes <- function(genotypes, threshold = 0.975) {
+prune_genotypes <- function(genotypes, threshold = 0.8) {
 
-   genotypes <- prune_qr(genotypes) # First remove colinear SNPs
+    genotypes <- prune_qr(genotypes)
 
-    cormat <- abs(cor(genotypes, use = "pairwise.complete.obs"))
+    cormat <- abs(cor(genotypes))
     cormat[cormat > abs(threshold)] <- NA
     diag(cormat) <- 1
-    remove_idx <- logical(nrow(cormat))
 
     while(any(is.na(cormat))) {
 
         remove_snp <- tibble(
-            num_NAs = apply(is.na(cormat), 1, sum, na.rm = TRUE),
+            label = rownames(cormat),
+            num_NAs = apply(is.na(cormat), 1, sum),
             avg_cor = apply(cormat, 1, mean, na.rm = TRUE)
-        ) %>%
-            mutate(index = row_number()) %>%
+            ) %>%
             filter(num_NAs == max(num_NAs)) %>%
             filter(avg_cor == max(avg_cor)) %>%
-            "$"(index)
+            "$"(label)
 
-        cormat <- cormat[-remove_snp, -remove_snp]
-        remove_idx[remove_snp] <- TRUE
+        cormat <- cormat[rownames(cormat) != remove_snp[1],
+                         rownames(cormat) != remove_snp[1],
+                         drop = FALSE]
     }
 
-    genotypes[, !remove_idx, drop = FALSE]
+    genotypes[, rownames(cormat), drop = FALSE]
 }
 
 plot_cormat <- function(M) {
