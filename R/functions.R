@@ -288,7 +288,7 @@ jam_wrap <- function(marginal_beta, # _original_ betas (log ORs if binary outcom
 
         z_score <- (marginal_beta / marginal_beta_se) / sqrt(n)
 
-        marginal_beta_transformed <- z_score * sqrt(var_gwas) / apply(ref_genotypes, 2, sd)
+        marginal_beta_transformed <- z_score * sqrt(trait_variance) / apply(ref_genotypes, 2, sd)
 
     } else {
 
