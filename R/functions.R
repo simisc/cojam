@@ -265,7 +265,7 @@ jam_wrap <- function(marginal_beta, # _original_ betas (log ORs if binary outcom
                      marginal_beta_se = NULL, # only required if binary outcome
                      prior_lambda = 1,
                      thinning_interval = NULL,
-                     list_args = FALSE) {
+                     ...) {
 
     names(marginal_beta) <- snp_names
     variables <- intersect(snp_names, colnames(ref_genotypes)) # Add message if this results in loss of variables...
@@ -292,13 +292,17 @@ jam_wrap <- function(marginal_beta, # _original_ betas (log ORs if binary outcom
 
     } else {
 
+        if (!is.null(marginal_beta_se)) {
+            warning("For continuous outcomes, ignoring argument marginal_beta_se")
+        }
+
         # Keep default inverse Gamma prior, a = b = 0.01
         extra_arguments <- NULL
         marginal_beta_transformed <- marginal_beta
 
     }
 
-    jam_args <- list(
+    list(
         marginal.betas = marginal_beta_transformed,
         X.ref = ref_genotypes,
         n = n,
@@ -309,10 +313,8 @@ jam_wrap <- function(marginal_beta, # _original_ betas (log ORs if binary outcom
             Variables = variables
         ),
         extra.arguments = extra_arguments,
-        thinning.interval = thinning_interval
-    )
-
-    if (list_args) return(jam_args) else return(do.call(JAM, jam_args))
+        ...
+        )
 }
 
 jam_plot <- function(jam_model,
