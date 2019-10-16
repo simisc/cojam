@@ -264,8 +264,7 @@ jam_wrap <- function(marginal_beta, # _original_ betas (log ORs if binary outcom
                      binary_outcome = FALSE,
                      marginal_beta_se = NULL, # only required if binary outcome
                      prior_lambda = 1,
-                     thinning_interval = NULL,
-                     ...) {
+                     thinning_interval = NULL) {
 
     names(marginal_beta) <- snp_names
     variables <- intersect(snp_names, colnames(ref_genotypes)) # Add message if this results in loss of variables...
@@ -302,19 +301,16 @@ jam_wrap <- function(marginal_beta, # _original_ betas (log ORs if binary outcom
 
     }
 
-    list(
-        marginal.betas = marginal_beta_transformed,
-        X.ref = ref_genotypes,
-        n = n,
-        trait.variance = trait_variance,
-        model.space.prior = list(
-            a = 1,
-            b = prior_lambda * length(variables),
-            Variables = variables
-        ),
-        extra.arguments = extra_arguments,
-        ...
-        )
+    list(marginal.betas = marginal_beta_transformed,
+         X.ref = ref_genotypes,
+         n = n,
+         trait.variance = trait_variance,
+         model.space.prior = list(
+             a = 1,
+             b = prior_lambda * length(variables),
+             Variables = variables
+         ),
+         extra.arguments = extra_arguments)
 }
 
 jam_plot <- function(jam_model,
@@ -325,8 +321,6 @@ jam_plot <- function(jam_model,
     # To do:
     # take all info from jam_model (recalculate p.values if enough info...?)
     # new argument groups defining which group each SNP is in (names are the SNPs)
-
-    # snp_names <- jam_model@model.space.priors[[1]]$Variables
 
     data <-tibble::tibble(
         SNP = snp_names,
