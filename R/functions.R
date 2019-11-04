@@ -55,7 +55,7 @@ jam_model_table <- function(jamres) {
 
         names(msp$Variables) <- msp$Variables
 
-        model_probs <- x_jam_res@enumerated.posterior.inference$model.probs
+        model_probs <- jamres@enumerated.posterior.inference$model.probs
 
         restab <- map_dfr(msp$Variables, function(v) {
             stringr::str_detect(names(model_probs), v)
