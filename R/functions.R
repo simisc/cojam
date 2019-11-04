@@ -41,18 +41,33 @@ jam_model_table <- function(jamres) {
 
     msp <- jamres@model.space.priors[[1]]
 
-    jamres@mcmc.output %>%
-        tibble::as_tibble() %>%
-        dplyr::select(-alpha, logLike = LogLikelihood) %>%
-        dplyr::group_by_all() %>%
-        dplyr::summarise(postProb = n()) %>%
-        dplyr::ungroup() %>%
+    if (jamres@enumerate.up.to.dim == 0) {
+
+        restab <- jamres@mcmc.output %>%
+            tibble::as_tibble() %>%
+            dplyr::select(-alpha, logLike = LogLikelihood) %>%
+            dplyr::group_by_all() %>%
+            dplyr::summarise(postProb = n()) %>%
+            dplyr::ungroup() %>%
+            dplyr::mutate(postProb = postProb / sum(postProb))
+
+    } else {
+
+        names(msp$Variables) <- msp$Variables
+
+        model_probs <- x_jam_res@enumerated.posterior.inference$model.probs
+
+        restab <- map_dfr(msp$Variables, function(v) {
+            stringr::str_detect(names(model_probs), v)
+            })
+
+        restab$postProb <- model_probs
+    }
+
+    restab %>%
         dplyr::arrange(dplyr::desc(postProb)) %>%
-        dplyr::mutate(
-            postProb = postProb / sum(postProb),
-            modelDim = rowSums(.[, msp$Variables]),
-            modelRank = dplyr::row_number()
-        )
+        dplyr::mutate(modelDim = rowSums(.[, msp$Variables]),
+                      modelRank = dplyr::row_number())
 }
 
 odds_to_prob <- function(odds) {
@@ -166,13 +181,13 @@ cojam <- function(jam_arg1, jam_arg2, prior_odds = 100) {
     res_summ <- priors_tab %>%
         dplyr::full_join(res_grid, by = "hypoth") %>%
         dplyr::mutate(
-            estProb_indep = postProb_1 * postProb_2,
-            estProb_joint = estProb_indep * weight
+            postprob_indep = postProb_1 * postProb_2,
+            postprob_joint = postprob_indep * weight
         )
         dplyr::group_by(hypoth, weight, prior_indep, prior_joint) %>%
         dplyr::summarise(
-            postprob_indep = sum(estProb_indep, na.rm = TRUE),
-            postprob_joint = sum(estProb_joint, na.rm = TRUE)
+            postprob_indep = sum(postprob_indep, na.rm = TRUE),
+            postprob_joint = sum(postprob_joint, na.rm = TRUE)
         )
 
     list(summary = res_summ,
@@ -322,10 +337,10 @@ jam_plot <- function(jam_model,
 }
 
 complement_DNA <- function(x) {
-    letters_x <- unlist(str_split(x, ""))
+    letters_x <- unlist(stringr::str_split(x, ""))
     letters_DNA <- "ACGTMRWSYKVHDBN-" # Biostrings::DNA_ALPHABET
 
-    if (!all(str_detect(letters_DNA, letters_x))) {
+    if (!all(stringr::str_detect(letters_DNA, letters_x))) {
         stop(sprintf("Acceptable input characters are %s", letters_DNA))
     }
 
