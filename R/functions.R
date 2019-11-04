@@ -183,12 +183,13 @@ cojam <- function(jam_arg1, jam_arg2, prior_odds = 100) {
         dplyr::mutate(
             postprob_indep = postProb_1 * postProb_2,
             postprob_joint = postprob_indep * weight
-        )
+        ) %>%
         dplyr::group_by(hypoth, weight, prior_indep, prior_joint) %>%
         dplyr::summarise(
             postprob_indep = sum(postprob_indep, na.rm = TRUE),
             postprob_joint = sum(postprob_joint, na.rm = TRUE)
-        )
+        ) %>%
+        ungroup()
 
     list(summary = res_summ,
          pars = c(lambda1 = lambda1, lambda2 = lambda2, prior_odds = prior_odds),
