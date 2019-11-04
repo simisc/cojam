@@ -38,6 +38,7 @@ logsum <- function(x) {
 }
 
 jam_model_table <- function(jamres) {
+
     msp <- jamres@model.space.priors[[1]]
 
     jamres@mcmc.output %>%
@@ -49,21 +50,7 @@ jam_model_table <- function(jamres) {
         dplyr::arrange(dplyr::desc(postProb)) %>%
         dplyr::mutate(
             postProb = postProb / sum(postProb),
-            # express as probabilties
             modelDim = rowSums(.[, msp$Variables]),
-            logPrior = log(
-                beta_binom_specific_model(
-                    k = modelDim,
-                    n = length(msp$Variables),
-                    a = msp$a,
-                    b = msp$b
-                )
-            ),
-            logPost  = logPrior + logLike,
-
-            # Normalise posterior:
-            logPost  = logPost - logsum(logPost),
-            estProb  = exp(logPost),
             modelRank = dplyr::row_number()
         )
 }
@@ -77,6 +64,8 @@ cojam_hypoth_priors <- function(lambda1 = 1, lambda2 = 1, odds_colocalisation = 
     pk1 <- odds_to_prob(lambda1)                      # p(k1 = 0), null model 1
     pk2 <- odds_to_prob(lambda2)                      # p(k2 = 0), null model 2
 
+    # Make size of region an argument: give option to define over the
+    # region being analysed or over a region of arbitry size (default 1000).
     odds_implied_prior <- 1000 * pk1 * pk2            # p(H3) / p(H4) under independence for a region of 1000 SNPs
 
     pr3_34_indep <- odds_to_prob(odds_implied_prior)   # p(H3 | {H3 U H4}) under independence
@@ -96,8 +85,7 @@ cojam_hypoth_priors <- function(lambda1 = 1, lambda2 = 1, odds_colocalisation = 
 }
 
 cojam_grid <- function(jamres1,
-                       jamres2,
-                       priors_tab) {
+                       jamres2) {
 
     v1 <- jamres1@model.space.priors[[1]]$Variables
     v2 <- jamres2@model.space.priors[[1]]$Variables
@@ -121,40 +109,12 @@ cojam_grid <- function(jamres1,
         dplyr::left_join(tab1, by = "modelRank_1") %>%
         dplyr::left_join(tab2, by = "modelRank_2") %>%
         dplyr::mutate(
-
             hypoth = dplyr::case_when(
                 modelDim_1 == 0 & modelDim_2 == 0 ~ 0,
                 modelDim_2 == 0 ~ 1,
                 modelDim_1 == 0 ~ 2,
                 num_coloc == 0 ~ 3,
-                TRUE ~ 4),
-
-            logLike_joint  = logLike_1 + logLike_2,
-
-            # Assuming independence (no reweighting):
-            logPrior_indep = logPrior_1 + logPrior_2,
-            logPost_indep  = logPrior_indep + logLike_joint,
-
-            # Normalise posterior:
-            logPost_indep  = logPost_indep - logsum(logPost_indep),
-            estProb_indep  = exp(logPost_indep)
-
-        ) %>%
-        dplyr::left_join(
-            dplyr::select(priors_tab, hypoth, weight),
-            by = "hypoth"
-            ) %>%
-        dplyr::mutate(
-
-            # Reweighting the prior depending on coloc hypotheses:
-            logPrior_joint = logPrior_indep + log(weight),
-
-            # Calculate joint posterior using reweighted prior
-            logPost_joint  = logPrior_joint + logLike_joint,
-
-            # Normalise posterior:
-            logPost_joint  = logPost_joint - logsum(logPost_joint),
-            estProb_joint  = exp(logPost_joint)
+                TRUE ~ 4)
         )
 }
 
@@ -197,19 +157,25 @@ cojam <- function(jam_arg1, jam_arg2, prior_odds = 100) {
     lambda1 <- jam_arg1$model.space.prior$b / length(jam_arg1$model.space.prior$Variables)
     lambda2 <- jam_arg2$model.space.prior$b / length(jam_arg2$model.space.prior$Variables)
 
-    priors_tab <- cojam_hypoth_priors(lambda1 = lambda1, lambda2 = lambda2, odds_colocalisation = prior_odds)
+    priors_tab <- cojam_hypoth_priors(lambda1 = lambda1,
+                                      lambda2 = lambda2,
+                                      odds_colocalisation = prior_odds)
 
-    res_grid <- cojam_grid(jam_res1, jam_res2, priors_tab)
+    res_grid <- cojam_grid(jam_res1, jam_res2)
 
-    res_summ <- tibble::tibble(hypoth = 0:4) %>%
+    res_summ <- priors_tab %>%
         dplyr::full_join(res_grid, by = "hypoth") %>%
-        dplyr::group_by(hypoth) %>%
+        dplyr::mutate(
+            estProb_indep = postProb_1 * postProb_2,
+            estProb_joint = estProb_indep * weight
+        )
+        dplyr::group_by(hypoth, weight, prior_indep, prior_joint) %>%
         dplyr::summarise(
             postprob_indep = sum(estProb_indep, na.rm = TRUE),
             postprob_joint = sum(estProb_joint, na.rm = TRUE)
         )
 
-    list(summary = dplyr::left_join(priors_tab, res_summ, by = "hypoth"),
+    list(summary = res_summ,
          pars = c(lambda1 = lambda1, lambda2 = lambda2, prior_odds = prior_odds),
          results = list(jam1 = jam_res1, jam2 = jam_res2, grid = res_grid))
 }
