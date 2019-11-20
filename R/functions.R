@@ -70,21 +70,17 @@ jam_model_table <- function(jamres) {
                       modelRank = dplyr::row_number())
 }
 
-odds_to_prob <- function(odds) {
-    odds / (1 + odds)
-}
-
 cojam_hypoth_priors <- function(lambda1 = 1, lambda2 = 1, odds_colocalisation = 100) {
 
-    pk1 <- odds_to_prob(lambda1)                      # p(k1 = 0), null model 1
-    pk2 <- odds_to_prob(lambda2)                      # p(k2 = 0), null model 2
+    pk1 <- lambda1 / (1 + lambda1)                    # p(k1 = 0), null model 1
+    pk2 <- lambda2 / (1 + lambda2)                    # p(k2 = 0), null model 2
 
     # Make size of region an argument: give option to define over the
     # region being analysed or over a region of arbitry size (default 1000).
     odds_implied_prior <- 1000 * pk1 * pk2            # p(H3) / p(H4) under independence for a region of 1000 SNPs
 
-    pr3_34_indep <- odds_to_prob(odds_implied_prior)   # p(H3 | {H3 U H4}) under independence
-    pr3_34_joint <- odds_to_prob(odds_colocalisation)  # p(H3 | {H3 U H4}) after reweighting
+    pr3_34_indep <- odds_implied_prior / (1 + odds_implied_prior)    # p(H3 | {H3 U H4}) under independence
+    pr3_34_joint <- odds_colocalisation / (1 + odds_colocalisation)  # p(H3 | {H3 U H4}) after reweighting
 
     pr012 <- c(pk1 * pk2,                             # p(H0)
                (1 - pk1) * pk2,                       # p(H1)
@@ -215,8 +211,10 @@ prune_genotypes <- function(genotypes, threshold = 0.8) {
             filter(avg_cor == max(avg_cor)) %>%
             "$"(label)
 
-        cormat <- cormat[rownames(cormat) != remove_snp[1],
-                         rownames(cormat) != remove_snp[1],
+        length(remove_snp) == 1 || stop("Tied SNPs in in prune_genotypes?")
+
+        cormat <- cormat[rownames(cormat) != remove_snp,
+                         rownames(cormat) != remove_snp,
                          drop = FALSE]
     }
 
@@ -295,51 +293,9 @@ jam_wrap <- function(marginal_beta, # _original_ betas (log ORs if binary outcom
          extra.arguments = extra_arguments)
 }
 
-jam_plot <- function(jam_model,
-                     snp_names,
-                     univariate_pvalues,
-                     groups = NULL) {
-
-    # To do:
-    # take all info from jam_model (recalculate p.values if enough info...?)
-    # new argument groups defining which group each SNP is in (names are the SNPs)
-
-    data <-tibble::tibble(
-        SNP = snp_names,
-        pvalue = univariate_pvalues
-        ) %>%
-        dplyr::mutate(neglogp = -log10(pvalue),
-                      index = row_number())
-
-    if (is.null(true_signal)) {
-        data$signal = data$neglogp == max(data$neglogp, na.rm = TRUE)
-    } else if (is.character(true_signal)) {
-        data$signal = data$SNP %in% true_signal
-    } else if (is.logical(true_signal) &
-               length(true_signal) == nrow(data)) {
-        data$signal = true_signal
-    } else {
-        stop("true_signal must be NULL, character or logical.")
-    }
-
-    post_prob <- jam_model@posterior.summary.table[, "PostProb"] %>%
-        na.omit() %>% # drops alpha, LogLikelihood, ModelSizePartition1 to only keep SNPs
-        tibble::tibble(post_prob = ., SNP = names(.)) %>%
-        dplyr::inner_join(data) %>%
-        tidyr::gather(key, value, post_prob, neglogp)
-
-    ggplot2::ggplot(post_prob, aes(x = index, y = value)) +
-        ggplot2::geom_point() +
-        ggplot2::facet_wrap(~ key,
-                            scales = "free_y",
-                            labeller = ggplot2::labeller(
-                                key = c(neglogp = "Univariate -log10(p)",
-                                        post_prob = "Marginal posterior probability")))
-}
-
 complement_DNA <- function(x) {
     letters_x <- unlist(stringr::str_split(x, ""))
-    letters_DNA <- "ACGTMRWSYKVHDBN-" # Biostrings::DNA_ALPHABET
+    letters_DNA <- "ACGTMRWSYKVHDBN-" # from Biostrings::DNA_ALPHABET
 
     if (!all(stringr::str_detect(letters_DNA, letters_x))) {
         stop(sprintf("Acceptable input characters are %s", letters_DNA))
