@@ -132,7 +132,7 @@ cojam_grid <- function(jamres1,
 subset_jam_args <- function(jam_args, vars) {
 
     if(!all(vars %in% jam_args$model.space.prior$Variables)) {
-        stop("Not all vars are in the existing JAM calls.")
+        stop("Not all vars are in the existing JAM calls (subset_jam_args).")
     }
 
     jam_args$marginal.betas <- jam_args$marginal.betas[vars]
@@ -152,14 +152,15 @@ cojam <- function(jam_arg1, jam_arg2, prior_odds = 100) {
     v1 <- names(jam_arg1$marginal.betas)
     v2 <- names(jam_arg2$marginal.betas)
 
-    if(length(v1) != length(v2) || any(v1 != v2)) {
+    # if(length(v1) != length(v2) || any(v1 != v2)) {
+    if(!identical(v1, v2)) {
 
-        vars <- intersect(v1, v2)
+        v1 <- intersect(v1, v2)
 
         warning(sprintf("Both JAM calls must use same SNPs\nKeeping intersection: %i SNPs", length(vars)))
 
-        jam_arg1 <- subset_jam_args(jam_arg1, vars)
-        jam_arg2 <- subset_jam_args(jam_arg2, vars)
+        jam_arg1 <- subset_jam_args(jam_arg1, v1)
+        jam_arg2 <- subset_jam_args(jam_arg2, v1)
     }
 
     jam_res1 <- do.call(JAM, jam_arg1)
@@ -188,7 +189,8 @@ cojam <- function(jam_arg1, jam_arg2, prior_odds = 100) {
         ungroup()
 
     list(summary = res_summ,
-         pars = c(lambda1 = lambda1, lambda2 = lambda2, prior_odds = prior_odds),
+         pars = c(lambda1 = lambda1, lambda2 = lambda2,
+                  prior_odds = prior_odds, variables = v1),
          results = list(jam1 = jam_res1, jam2 = jam_res2, grid = res_grid))
 }
 
