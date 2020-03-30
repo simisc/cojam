@@ -134,9 +134,6 @@ subset_jam_args <- function(jam_args, vars) {
     if(!all(vars %in% jam_args$model.space.prior$Variables)) {
         stop("Not all vars are in the existing JAM calls (subset_jam_args).")
     }
-    if(!all(vars %in% colnames(jam_args$X.ref))) {
-        stop("Not all vars are in the existing genotype matrix (subset_jam_args).")
-    }
 
     jam_args$marginal.betas <- jam_args$marginal.betas[vars]
     jam_args$X.ref <- jam_args$X.ref[, vars]
@@ -243,14 +240,19 @@ plot_cormat <- function(M) {
 
 jam_wrap <- function(marginal_beta, # _original_ betas (log ORs if binary outcome)
                      snp_names,
+                     ref_genotypes,
                      n,
                      trait_variance,
                      binary_outcome = FALSE,
                      marginal_beta_se = NULL, # only required if binary outcome
-                     genotype_std_dev = NULL, # only required if binary outcome
                      prior_lambda = 1) {      # temporary: need to rethink this!
 
     names(marginal_beta) <- snp_names
+    variables <- intersect(snp_names, colnames(ref_genotypes)) # Add message if this results in loss of variables...
+
+    marginal_beta <- marginal_beta[variables]
+    ref_genotypes <- ref_genotypes[, variables]
+
     extra_arguments <- NULL # for continuous outcome, default inverse Gamma prior, a = b = 0.01
 
     if (binary_outcome) {
@@ -258,20 +260,20 @@ jam_wrap <- function(marginal_beta, # _original_ betas (log ORs if binary outcom
         if (is.null(marginal_beta_se)) {
             stop("For binary outcomes, supply marginal_beta_se: std errors of the log-ORs")
         }
-        if (is.null(genotype_std_dev)) {
-            stop("For binary outcomes, supply genotype_std_dev: apply(ref_genotypes, 2, sd)")
-        }
+
+        names(marginal_beta_se) <- snp_names
+        marginal_beta_se <- marginal_beta_se[variables]
 
         # NB: extra arguments must be named!
         extra_arguments <- list(GaussianResidualVarianceInvGammaPrior_a = 2,
                                 GaussianResidualVarianceInvGammaPrior_b = trait_variance)
 
         z_score <- (marginal_beta / marginal_beta_se) / sqrt(n)
-        marginal_beta <- z_score * sqrt(trait_variance) / genotype_std_dev
-
+        marginal_beta <- z_score * sqrt(trait_variance) / apply(ref_genotypes, 2, sd)
         }
 
     list(marginal.betas = marginal_beta,
+         X.ref = ref_genotypes,
          n = n,
          trait.variance = trait_variance,
          model.space.prior = list(
