@@ -53,6 +53,8 @@ jam_model_table <- function(jamres) {
 
     } else {
 
+        warning("Priors for enumerated cojam are wrong!")
+
         names(msp$Variables) <- msp$Variables
 
         model_probs <- jamres@enumerated.posterior.inference$model.probs
@@ -179,7 +181,11 @@ cojam <- function(jam_arg1, jam_arg2, prior_odds = 100) {
         dplyr::full_join(res_grid, by = "hypoth") %>%
         dplyr::mutate(
             postprob_indep = postProb_1 * postProb_2,
-            postprob_joint = postprob_indep * weight
+            postprob_joint = postprob_indep * weight,
+
+            ## Workaround: is this correct? Or should I be calculating posterior ##
+            ## probabilities directly from likelihoods and (reweighted) priors?  ##
+            postprob_joint = postprob_joint / sum(postprob_joint, na.rm = TRUE)
         ) %>%
         dplyr::group_by(hypoth, weight, prior_indep, prior_joint) %>%
         dplyr::summarise(
