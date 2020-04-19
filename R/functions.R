@@ -72,17 +72,14 @@ jam_model_table <- function(jamres) {
                       modelRank = dplyr::row_number())
 }
 
-cojam_hypoth_priors <- function(lambda1 = 1, lambda2 = 1, n_snps = 1000) {
+cojam_hypoth_priors <- function(lambda1 = 1, lambda2 = 1, odds_colocalisation = 100) {
 
     pk1 <- lambda1 / (1 + lambda1)                    # p(k1 = 0), null model 1
     pk2 <- lambda2 / (1 + lambda2)                    # p(k2 = 0), null model 2
 
-    odds_implied_prior <- pk1 * pk2 * n_snps          # p(H3) / p(H4) under independence
-    # Based on linear APPROXIMATION in size P, not good for P<25 ??
-
-    odds_colocalisation <- odds_implied_prior / 1000  # odds after reweighting
-    # Factor of 1000 is based on coloc's default priors p1*p2/p12 = 0.001
-    # Need to think of a better way to parametrise this so that can give users choice of prior!
+    # Make size of region an argument: give option to define over the
+    # region being analysed or over a region of arbitry size (default 1000).
+    odds_implied_prior <- 1000 * pk1 * pk2            # p(H3) / p(H4) under independence for a region of 1000 SNPs
 
     pr3_3u4_indep <- odds_implied_prior / (1 + odds_implied_prior)    # p(H3 | {H3 U H4}) under independence
     pr3_3u4_joint <- odds_colocalisation / (1 + odds_colocalisation)  # p(H3 | {H3 U H4}) after reweighting
@@ -146,7 +143,7 @@ subset_jam_args <- function(jam_args, vars) {
     jam_args
 }
 
-cojam <- function(jam_arg1, jam_arg2) {
+cojam <- function(jam_arg1, jam_arg2, prior_odds = 100) {
 
     if(jam_arg1$model.space.prior$a != 1 | jam_arg2$model.space.prior$a != 1) {
         stop("Model space priors of both JAM calls must be of the form BetaBin(1, b).")
@@ -174,7 +171,7 @@ cojam <- function(jam_arg1, jam_arg2) {
 
     priors_tab <- cojam_hypoth_priors(lambda1 = lambda1,
                                       lambda2 = lambda2,
-                                      n_snps = length(v1))
+                                      odds_colocalisation = prior_odds)
 
     res_grid <- cojam_grid(jam_res1, jam_res2)
 
