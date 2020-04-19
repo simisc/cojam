@@ -196,9 +196,8 @@ cojam <- function(jam_arg1, jam_arg2) {
         ungroup()
 
     list(summary = res_summ,
-         pars = c(lambda1 = lambda1, lambda2 = lambda2,
-                  prior_odds = prior_odds, variables = v1),
-         results = list(jam1 = jam_res1, jam2 = jam_res2, grid = res_grid))
+         results = list(jam1 = jam_res1, jam2 = jam_res2, grid = res_grid),
+         pars = list(lambda1 = lambda1, lambda2 = lambda2, variables = v1))
 }
 
 prune_genotypes <- function(genotypes, threshold = 0.8) {
