@@ -202,6 +202,8 @@ cojam <- function(jam_arg1, jam_arg2) {
 
 prune_genotypes <- function(genotypes, threshold = 0.8) {
 
+    warning("Obsolete: use hiearchical version instead (prune_genotypes).")
+
     genotypes <- prune_qr(genotypes)
 
     cormat <- abs(cor(genotypes))
