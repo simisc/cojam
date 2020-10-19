@@ -125,7 +125,8 @@ cojam_grid <- function(jamres1,
                 modelDim_2 == 0 ~ 1,
                 modelDim_1 == 0 ~ 2,
                 num_coloc == 0 ~ 3,
-                TRUE ~ 4)
+                TRUE ~ 4),
+            postprob_indep = postProb_1 * postProb_2,
         )
 }
 
@@ -176,21 +177,18 @@ cojam <- function(jam_arg1, jam_arg2, prior_odds = 100) {
     res_grid <- cojam_grid(jam_res1, jam_res2)
 
     res_summ <- priors_tab %>%
-        dplyr::full_join(res_grid, by = "hypoth") %>%
+        dplyr::group_by_all() %>%
+        dplyr::left_join(res_grid, by = "hypoth") %>%
+        dplyr::summarise(
+            postprob_indep = sum(postprob_indep, na.rm = TRUE),
+            postprob_joint = sum(postprob_indep * weight, na.rm = TRUE)
+        ) %>%
+        dplyr::ungroup() %>%
         dplyr::mutate(
-            postprob_indep = postProb_1 * postProb_2,
-            postprob_joint = postprob_indep * weight,
-
             ## Workaround: is this correct? Or should I be calculating posterior ##
             ## probabilities directly from likelihoods and (reweighted) priors?  ##
             postprob_joint = postprob_joint / sum(postprob_joint, na.rm = TRUE)
-        ) %>%
-        dplyr::group_by(hypoth, weight, prior_indep, prior_joint) %>%
-        dplyr::summarise(
-            postprob_indep = sum(postprob_indep, na.rm = TRUE),
-            postprob_joint = sum(postprob_joint, na.rm = TRUE)
-        ) %>%
-        ungroup()
+        )
 
     list(summary = res_summ,
          results = list(jam1 = jam_res1, jam2 = jam_res2, grid = res_grid),
