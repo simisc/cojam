@@ -67,6 +67,41 @@ jam_model_table <- function(jamres) {
                       modelRank = dplyr::row_number())
 }
 
+cojam_grid <- function(jamres1,
+                       jamres2) {
+
+    v1 <- jamres1@model.space.priors[[1]]$Variables
+    v2 <- jamres2@model.space.priors[[1]]$Variables
+
+    if(length(v1) != length(v2) || any(v1 != v2)) {
+        stop("Both JAM calls must use same SNPs")
+    }
+
+    tab1 <- jam_model_table(jamres1)
+    tab2 <- jam_model_table(jamres2)
+
+    X <- tcrossprod(as.matrix(tab1[, v1]), as.matrix(tab2[, v2]))
+
+    names(tab1) <- sprintf("%s_1", names(tab1))
+    names(tab2) <- sprintf("%s_2", names(tab2))
+
+    reshape2::melt(X,
+                   varnames = c("modelRank_1", "modelRank_2"),
+                   value.name = "num_coloc") %>%
+        tibble::as_tibble() %>%
+        dplyr::left_join(tab1, by = "modelRank_1") %>%
+        dplyr::left_join(tab2, by = "modelRank_2") %>%
+        dplyr::mutate(
+            hypoth = dplyr::case_when(
+                modelDim_1 == 0 & modelDim_2 == 0 ~ 0,
+                modelDim_2 == 0 ~ 1,
+                modelDim_1 == 0 ~ 2,
+                num_coloc == 0 ~ 3,
+                TRUE ~ 4),
+            postprob_indep = postProb_1 * postProb_2,
+        )
+}
+
 subset_jam_args <- function(jam_args, vars) {
 
     if(!all(vars %in% jam_args$model.space.prior$Variables)) {
@@ -99,12 +134,19 @@ hypoth_priors <- function(lambda1 = 1, lambda2 = 1, n_snps = 1000) {
     pr3u4 <- (1 - pk1) * (1 - pk2)                      # p(H3 U H4)
     pr34 <- pr3u4 * c(pr3_3u4_indep, 1 - pr3_3u4_indep) # p(H3), p(H4)
 
+    # pr3_3u4_joint <- odds_colocalisation / (1 + odds_colocalisation)  # p(H3 | {H3 U H4}) after reweighting
+    # tibble::tibble(hypoth = 0:4,
+    #                prior_indep = c(pr012, pr3u4 * c(pr3_3u4_indep, 1 - pr3_3u4_indep)),
+    #                prior_joint = c(pr012, pr3u4 * c(pr3_3u4_joint, 1 - pr3_3u4_joint)),
+    #                weight = c(1, 1, 1, pr3_3u4_joint / pr3_3u4_indep, (1 - pr3_3u4_joint) / (1 - pr3_3u4_indep)))
+
     list(
         hypoth_priors = tibble::tibble(hypoth = 0:4, prior_indep = c(pr012, pr34)),
         colocalisation_priors = c(odds_colocalisation = odds_implied_prior, # p(H3) / p(H4)
                                   probability_overlap = pr3u4)              # p(H3 U H4)
     )
 }
+
 
 cojam <- function(jam_arg1, jam_arg2, prior_odds = NULL) {
 
@@ -219,6 +261,23 @@ cojam_postprobs <- function(cojam_res, prior_odds) {
     #     ) %>%
     #     ungroup()
 
+    res_summ <- priors_tab %>%
+        dplyr::group_by_all() %>%
+        dplyr::left_join(res_grid, by = "hypoth") %>%
+        dplyr::summarise(
+            postprob_indep = sum(postprob_indep, na.rm = TRUE),
+            postprob_joint = sum(postprob_indep * weight, na.rm = TRUE)
+        ) %>%
+        dplyr::ungroup() %>%
+        dplyr::mutate(
+            ## Workaround: is this correct? Or should I be calculating posterior ##
+            ## probabilities directly from likelihoods and (reweighted) priors?  ##
+            postprob_joint = postprob_joint / sum(postprob_joint, na.rm = TRUE)
+        )
+
+    list(summary = res_summ,
+         results = list(jam1 = jam_res1, jam2 = jam_res2, grid = res_grid),
+         pars = list(lambda1 = lambda1, lambda2 = lambda2, variables = v1))
 }
 
 prune_genotypes <- function(genotypes, threshold = 0.8) {
