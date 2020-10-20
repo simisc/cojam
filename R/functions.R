@@ -1,26 +1,3 @@
-#' Pipe
-#'
-#' Imported from \code{\link[magrittr]{pipe}}
-#' @importFrom magrittr %>%
-#' @name %>%
-#' @rdname pipe
-#' @export
-NULL
-
-prune_qr <- function(genotype_matrix) {
-    if (any(is.na(genotype_matrix))) {
-        n <- nrow(genotype_matrix)
-        genotype_matrix <- na.omit(genotype_matrix)
-        message(sprintf(
-            "Removing %i rows containing missing values (prune_qr).",
-            n - nrow(genotype_matrix)
-        ))
-    }
-
-    gm_qr <- qr(genotype_matrix)
-    genotype_matrix[, gm_qr$pivot[seq_len(gm_qr$rank)]]
-}
-
 beta_binom_specific_model <- function(k, n, a, b) {
     # Calculates a Beta-Binomial prior probability for a SPECIFIC model. From Bottolo et al.
     # This is not the prior on a particular dimension (that would required the binomial co-efficient).
@@ -32,9 +9,50 @@ beta_binom_specific_model <- function(k, n, a, b) {
     beta(k + a, n - k + b) / beta(a, b)
 }
 
-logsum <- function(x) {
-    max_x <- max(x)
-    max_x + log(sum(exp(x - max_x)))
+jam_wrap <- function(marginal_beta, # _original_ betas (log ORs if binary outcome)
+                     snp_names,
+                     ref_genotypes,
+                     n,
+                     trait_variance,
+                     binary_outcome = FALSE,
+                     marginal_beta_se = NULL, # only required if binary outcome
+                     prior_lambda = 1) {      # temporary: need to rethink this!
+
+    names(marginal_beta) <- snp_names
+    variables <- intersect(snp_names, colnames(ref_genotypes)) # Add message if this results in loss of variables...
+
+    marginal_beta <- marginal_beta[variables]
+    ref_genotypes <- ref_genotypes[, variables]
+
+    extra_arguments <- NULL # for continuous outcome, default inverse Gamma prior, a = b = 0.01
+
+    if (binary_outcome) {
+
+        if (is.null(marginal_beta_se)) {
+            stop("For binary outcomes, supply marginal_beta_se: std errors of the log-ORs")
+        }
+
+        names(marginal_beta_se) <- snp_names
+        marginal_beta_se <- marginal_beta_se[variables]
+
+        # NB: extra arguments must be named!
+        extra_arguments <- list(GaussianResidualVarianceInvGammaPrior_a = 2,
+                                GaussianResidualVarianceInvGammaPrior_b = trait_variance)
+
+        z_score <- (marginal_beta / marginal_beta_se) / sqrt(n)
+        marginal_beta <- z_score * sqrt(trait_variance) / apply(ref_genotypes, 2, sd)
+    }
+
+    list(marginal.betas = marginal_beta,
+         X.ref = ref_genotypes,
+         n = n,
+         trait.variance = trait_variance,
+         model.space.prior = list(
+             a = 1,
+             b = prior_lambda * length(variables),
+             Variables = variables
+         ),
+         extra.arguments = extra_arguments)
 }
 
 jam_model_table <- function(jamres) {
@@ -117,6 +135,12 @@ subset_jam_args <- function(jam_args, vars) {
 }
 
 hypoth_priors <- function(lambda1 = 1, lambda2 = 1, n_snps = 1000) {
+
+
+    # Change this to calculate the actual priors (using combinatorics) for any models
+    # smaller than 50 SNPs? This should be based on the true n_snps of the region,
+    # and should be possible for any arbitrary beta-binomial priors specified (no need for lambdas).
+
 
     pk1 <- lambda1 / (1 + lambda1)                    # p(k1 = 0), null model 1
     pk2 <- lambda2 / (1 + lambda2)                    # p(k2 = 0), null model 2
@@ -280,105 +304,6 @@ cojam_postprobs <- function(cojam_res, prior_odds) {
          pars = list(lambda1 = lambda1, lambda2 = lambda2, variables = v1))
 }
 
-prune_genotypes <- function(genotypes, threshold = 0.8) {
 
-    warning("Obsolete: use hiearchical version instead (prune_genotypes).")
 
-    genotypes <- prune_qr(genotypes)
 
-    cormat <- abs(cor(genotypes))
-    cormat[cormat > abs(threshold)] <- NA
-    diag(cormat) <- 1
-
-    while(any(is.na(cormat))) {
-
-        remove_snp <- tibble(
-            label = rownames(cormat),
-            num_NAs = apply(is.na(cormat), 1, sum),
-            avg_cor = apply(cormat, 1, mean, na.rm = TRUE)
-            ) %>%
-            filter(num_NAs == max(num_NAs)) %>%
-            filter(avg_cor == max(avg_cor)) %>%
-            "$"(label)
-
-        length(remove_snp) == 1 || stop("Tied SNPs in in prune_genotypes?")
-
-        cormat <- cormat[rownames(cormat) != remove_snp,
-                         rownames(cormat) != remove_snp,
-                         drop = FALSE]
-    }
-
-    genotypes[, rownames(cormat), drop = FALSE]
-}
-
-plot_cormat <- function(M) {
-    isSymmetric(M) || stop("Correlation matrix must be symmetric")
-
-    M %>%
-        reshape2::melt() %>%
-        ggplot2::ggplot() +
-        # ggplot2::geom_raster(aes(Var1, Var2, fill = value)) +
-        ggplot2::geom_raster(aes(Var1, reorder(Var2, desc(Var2)), fill = value)) +
-        ggplot2::theme(axis.title = element_blank(),
-                       axis.text.x = element_text(angle = 90)) +
-        ggplot2::scale_x_discrete(position = "top") +
-        ggplot2::scale_fill_gradient2(limits = c(-1, 1)) +
-        ggplot2::coord_fixed()
-}
-
-jam_wrap <- function(marginal_beta, # _original_ betas (log ORs if binary outcome)
-                     snp_names,
-                     ref_genotypes,
-                     n,
-                     trait_variance,
-                     binary_outcome = FALSE,
-                     marginal_beta_se = NULL, # only required if binary outcome
-                     prior_lambda = 1) {      # temporary: need to rethink this!
-
-    names(marginal_beta) <- snp_names
-    variables <- intersect(snp_names, colnames(ref_genotypes)) # Add message if this results in loss of variables...
-
-    marginal_beta <- marginal_beta[variables]
-    ref_genotypes <- ref_genotypes[, variables]
-
-    extra_arguments <- NULL # for continuous outcome, default inverse Gamma prior, a = b = 0.01
-
-    if (binary_outcome) {
-
-        if (is.null(marginal_beta_se)) {
-            stop("For binary outcomes, supply marginal_beta_se: std errors of the log-ORs")
-        }
-
-        names(marginal_beta_se) <- snp_names
-        marginal_beta_se <- marginal_beta_se[variables]
-
-        # NB: extra arguments must be named!
-        extra_arguments <- list(GaussianResidualVarianceInvGammaPrior_a = 2,
-                                GaussianResidualVarianceInvGammaPrior_b = trait_variance)
-
-        z_score <- (marginal_beta / marginal_beta_se) / sqrt(n)
-        marginal_beta <- z_score * sqrt(trait_variance) / apply(ref_genotypes, 2, sd)
-        }
-
-    list(marginal.betas = marginal_beta,
-         X.ref = ref_genotypes,
-         n = n,
-         trait.variance = trait_variance,
-         model.space.prior = list(
-             a = 1,
-             b = prior_lambda * length(variables),
-             Variables = variables
-         ),
-         extra.arguments = extra_arguments)
-}
-
-complement_DNA <- function(x) {
-    letters_x <- unlist(stringr::str_split(x, ""))
-    letters_DNA <- "ACGTMRWSYKVHDBN-" # from Biostrings::DNA_ALPHABET
-
-    if (!all(stringr::str_detect(letters_DNA, letters_x))) {
-        stop(sprintf("Acceptable input characters are %s", letters_DNA))
-    }
-
-    chartr(letters_DNA, "TGCAKYWSRMBDHVN-", x)
-}
