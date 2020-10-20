@@ -48,29 +48,24 @@ jam_models <- function(jamres) {
 
     msp <- jamres@model.space.priors[[1]]
 
-    if (jamres@enumerate.up.to.dim == 0) {
-
-        restab <- jamres@mcmc.output %>%
-            tibble::as_tibble() %>%
-            dplyr::select(-alpha, logLike = LogLikelihood) %>%
-            dplyr::group_by_all() %>%
-            dplyr::summarise(posterior = n()) %>%
-            dplyr::ungroup()
-
-    } else {
-        stop("Not yet implemented for enumerated JAM models (cojam priors are wrong)")
-        names(msp$Variables) <- msp$Variables
-        model_probs <- jamres@enumerated.posterior.inference$model.probs
-        restab <- map_dfr(msp$Variables, function(v) {
-            stringr::str_detect(names(model_probs), v)
-            })
-        restab$posterior <- model_probs
+    if (jamres@enumerate.up.to.dim > 0) {
+        stop("Not yet implemented for enumerated JAM models.")
+        # names(msp$Variables) <- msp$Variables
+        # model_probs <- jamres@enumerated.posterior.inference$model.probs
+        # restab <- map_dfr(msp$Variables, function(v) {
+        #     stringr::str_detect(names(model_probs), v)
+        # })
+        # restab$posterior <- model_probs
     }
 
-    restab %>%
+    jamres@mcmc.output %>%
+        tibble::as_tibble() %>%
+        dplyr::select(-alpha, logLike = LogLikelihood) %>%
+        dplyr::group_by_all() %>%
+        dplyr::summarise(posterior = n(), .groups = "drop") %>%
         dplyr::arrange(dplyr::desc(posterior)) %>%
-        dplyr::mutate(modelDim = rowSums(.[, msp$Variables]),
-                      modelRank = dplyr::row_number())
+        dplyr::mutate(model_size = rowSums(.[, msp$Variables]),
+                      model_rank = dplyr::row_number())
 }
 
 # Calculates a Beta-Binomial prior probability for a SPECIFIC model. From Bottolo et al.
@@ -94,6 +89,8 @@ implied_prior <- function(jam_arg1, jam_arg2) {
         stop("JAM calls must include identical variables. Use tag() to find a suitable set of SNPs.")
     }
 
+    n_snps <- length(jam_arg1$model.space.prior$Variables)
+
     model_priors1 <- model_size_priors(jam_arg1)
     model_priors2 <- model_size_priors(jam_arg2)
 
@@ -102,12 +99,12 @@ implied_prior <- function(jam_arg1, jam_arg2) {
     p_H2 <- model_priors_1[1] - p_H0
     p_H3_U_H4 <- 1 - p_H2 - p_H1 - p_H0
 
-    p_H3 <- expand.grid(i = 1:(p - 1),
-                          j = 1:(p - 1)) %>%
-        filter(i + j <= p) %>%
+    p_H3 <- expand.grid(i = 1:(n_snps - 1),
+                        j = 1:(n_snps - 1)) %>%
+        filter(i + j <= n_snps) %>%
         mutate(prior_1 = model_priors_1[i + 1],
                prior_2 = model_priors_2[j + 1],
-               h3_combos = choose(p, i) * choose(p - i, j),
+               h3_combos = choose(n_snps, i) * choose(n_snps - i, j),
                h3_prior = prior_1 * prior_2 * h3_combos) %>%
         pull(h3_prior) %>%
         sum()
@@ -130,23 +127,18 @@ cojam <- function(jam_arg1, jam_arg2, prior_odds_43 = NA) {
     jam_tab1 <- jam_models(jam_res1)
     jam_tab2 <- jam_models(jam_res2)
 
-    X <- tcrossprod(as.matrix(jam_tab1[, v1]),
-                    as.matrix(jam_tab2[, v1]))
-
-    names(jam_tab1) <- sprintf("%s_1", names(jam_tab1))
-    names(jam_tab2) <- sprintf("%s_2", names(jam_tab2))
-
-    posterior_counts <- reshape2::melt(X,
-                               varnames = c("modelRank_1", "modelRank_2"),
-                               value.name = "num_coloc") %>%
+    posterior_counts <- tcrossprod(as.matrix(jam_tab1[, v1]),
+                                   as.matrix(jam_tab2[, v1])) %>%
+        reshape2::melt(varnames = c("model_rank_1", "model_rank_2"),
+                       value.name = "num_coloc") %>%
         tibble::as_tibble() %>%
-        dplyr::left_join(jam_tab1, by = "modelRank_1") %>%
-        dplyr::left_join(jam_tab2, by = "modelRank_2") %>%
+        dplyr::full_join(jam_tab1, by = "model_rank_1") %>%
+        dplyr::full_join(jam_tab2, by = "model_rank_2", suffix = c("_1", "_2")) %>%
         dplyr::mutate(
             hypoth = dplyr::case_when(
-                modelDim_1 == 0 & modelDim_2 == 0 ~ "H0",
-                modelDim_2 == 0 ~ "H1",
-                modelDim_1 == 0 ~ "H2",
+                model_size_1 == 0 & model_size_2 == 0 ~ "H0",
+                model_size_2 == 0 ~ "H1",
+                model_size_1 == 0 ~ "H2",
                 num_coloc == 0 ~ "H3",
                 TRUE ~ "H4"),
             posterior_indep = posterior_1 * posterior_2
