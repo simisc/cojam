@@ -65,9 +65,8 @@ jam_model_table <- function(jamres) {
             tibble::as_tibble() %>%
             dplyr::select(-alpha, logLike = LogLikelihood) %>%
             dplyr::group_by_all() %>%
-            dplyr::summarise(postProb = n()) %>%
-            dplyr::ungroup() %>%
-            dplyr::mutate(postProb = postProb / sum(postProb))
+            dplyr::summarise(posterior = n()) %>%
+            dplyr::ungroup()
 
     } else {
         stop("Not yet implemented for enumerated JAM models (cojam priors are wrong)")
@@ -76,48 +75,13 @@ jam_model_table <- function(jamres) {
         restab <- map_dfr(msp$Variables, function(v) {
             stringr::str_detect(names(model_probs), v)
             })
-        restab$postProb <- model_probs
+        restab$posterior <- model_probs
     }
 
     restab %>%
-        dplyr::arrange(dplyr::desc(postProb)) %>%
+        dplyr::arrange(dplyr::desc(posterior)) %>%
         dplyr::mutate(modelDim = rowSums(.[, msp$Variables]),
                       modelRank = dplyr::row_number())
-}
-
-cojam_grid <- function(jamres1,
-                       jamres2) {
-
-    v1 <- jamres1@model.space.priors[[1]]$Variables
-    v2 <- jamres2@model.space.priors[[1]]$Variables
-
-    if(length(v1) != length(v2) || any(v1 != v2)) {
-        stop("Both JAM calls must use same SNPs")
-    }
-
-    tab1 <- jam_model_table(jamres1)
-    tab2 <- jam_model_table(jamres2)
-
-    X <- tcrossprod(as.matrix(tab1[, v1]), as.matrix(tab2[, v2]))
-
-    names(tab1) <- sprintf("%s_1", names(tab1))
-    names(tab2) <- sprintf("%s_2", names(tab2))
-
-    reshape2::melt(X,
-                   varnames = c("modelRank_1", "modelRank_2"),
-                   value.name = "num_coloc") %>%
-        tibble::as_tibble() %>%
-        dplyr::left_join(tab1, by = "modelRank_1") %>%
-        dplyr::left_join(tab2, by = "modelRank_2") %>%
-        dplyr::mutate(
-            hypoth = dplyr::case_when(
-                modelDim_1 == 0 & modelDim_2 == 0 ~ 0,
-                modelDim_2 == 0 ~ 1,
-                modelDim_1 == 0 ~ 2,
-                num_coloc == 0 ~ 3,
-                TRUE ~ 4),
-            postprob_indep = postProb_1 * postProb_2,
-        )
 }
 
 subset_jam_args <- function(jam_args, vars) {
@@ -172,27 +136,15 @@ hypoth_priors <- function(lambda1 = 1, lambda2 = 1, n_snps = 1000) {
 }
 
 
-cojam <- function(jam_arg1, jam_arg2, prior_odds = NULL) {
+cojam <- function(jam_arg1, jam_arg2, prior_odds = NULL, tag_threshold = 0.9) {
 
     if(jam_arg1$model.space.prior$a != 1 | jam_arg2$model.space.prior$a != 1) {
         stop("Model space priors of both JAM calls must be of the form BetaBin(1, b).")
     }
 
-    v1 <- jam_arg1$model.space.prior$Variables
-    v2 <- jam_arg2$model.space.prior$Variables
-
-    if(!identical(v1, v2)) {
-
-        v1 <- intersect(v1, v2)
-
-        warning(sprintf("Both JAM calls must use same SNPs\nKeeping intersection: %i SNPs", length(vars)))
-
-        jam_arg1 <- subset_jam_args(jam_arg1, v1)
-        jam_arg2 <- subset_jam_args(jam_arg2, v1)
-    }
-
-    lambda1 <- jam_arg1$model.space.prior$b / length(jam_arg1$model.space.prior$Variables)
-    lambda2 <- jam_arg2$model.space.prior$b / length(jam_arg2$model.space.prior$Variables)
+    v1 <- tags(jam_arg1$X.ref, jam_arg2$X.ref, threshold)
+    jam_arg1 <- subset_jam_args(jam_arg1, v1)
+    jam_arg2 <- subset_jam_args(jam_arg2, v1)
 
     jam_res1 <- do.call(JAM, jam_arg1)
     jam_res2 <- do.call(JAM, jam_arg2)
@@ -219,8 +171,14 @@ cojam <- function(jam_arg1, jam_arg2, prior_odds = NULL) {
                 modelDim_1 == 0 ~ 2,
                 num_coloc == 0 ~ 3,
                 TRUE ~ 4),
-            postprob_indep = postProb_1 * postProb_2
+            posterior_indep = posterior_1 * posterior_2
         )
+
+
+    # Priors
+
+    lambda1 <- jam_arg1$model.space.prior$b / length(jam_arg1$model.space.prior$Variables)
+    lambda2 <- jam_arg2$model.space.prior$b / length(jam_arg2$model.space.prior$Variables)
 
     implied_prior_independent <- hypoth_priors(lambda1 = lambda1,
                                                lambda2 = lambda2,
@@ -229,12 +187,13 @@ cojam <- function(jam_arg1, jam_arg2, prior_odds = NULL) {
     hypotheses_summary <- implied_prior_independent$hypoth_priors %>%
         dplyr::group_by_all() %>%
         dplyr::full_join(res_grid, by = "hypoth") %>%
-        dplyr::summarise(postprob_indep = sum(postprob_indep, na.rm = TRUE)) %>%
+        dplyr::summarise(posterior_indep = sum(posterior_indep, na.rm = TRUE)) %>%
         dplyr::ungroup()
 
     # Need implied prior here after all...
-    postprob34 <- c(H4 = hypotheses_summary$postprob_indep[hypotheses_summary$hypoth == 4],
-                    H3 = hypotheses_summary$postprob_indep[hypotheses_summary$hypoth == 3])
+
+    postprob34 <- c(H4 = hypotheses_summary$posterior_indep[hypotheses_summary$hypoth == 4],
+                    H3 = hypotheses_summary$posterior_indep[hypotheses_summary$hypoth == 3])
     posterior_odds <- postprob34["H4"] / postprob34["H3"]
     bf <- posterior_odds * implied_prior_independent$colocalisation_priors$odds_colocalisation
 

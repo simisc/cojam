@@ -12,10 +12,13 @@ logsum <- function(x) {
     max_x + log(sum(exp(x - max_x)))
 }
 
-tags <- function(genotypes_1, genotypes_2 = NULL, threshold = 0.9) {
+tags <- function(genotypes_1, genotypes_2, threshold = 0.9) {
 
-    r2a <- r2b <- genotypes_1 %>%
-        rbind(genotypes_2) %>%
+    vars <- intersect(colnames(genotypes_1),
+                      colnames(genotypes_2))
+
+    r2a <- r2b <- genotypes_1[, vars] %>%
+        rbind(genotypes_2[, vars]) %>%
         cov()
 
     hc <- hclust(as.dist(1 - r2), "single")
@@ -24,15 +27,13 @@ tags <- function(genotypes_1, genotypes_2 = NULL, threshold = 0.9) {
     r2b[outer(clusters, clusters, "==")] <- NA
 
     enframe(clusters, name = "snp", value = "group") %>%
-        mutate(r2_in = apply(r2a, 1, mean, na.rm = TRUE),
-               r2_out = apply(r2b, 1, mean, na.rm = TRUE)) %>%
+        mutate(r2_within = apply(r2a, 1, mean, na.rm = TRUE),
+               r2_between = apply(r2b, 1, mean, na.rm = TRUE)) %>%
         group_by(group) %>%
         mutate(group_size = n(),
-               rank = order(order(-r2_in, r2_out))) %>%
-        filter(snp %in% vars1,
-               snp %in% vars2) %>%
+               rank = order(order(-r2_within, r2_between))) %>%
         filter(rank == min(rank)) %>%
-        "$"(snp)
+        pull(snp)
 }
 
 plot_cormat <- function(M) {
