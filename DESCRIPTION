@@ -4,8 +4,8 @@ Title: Multi-variant colocalisation with summary genetic association data
 Version: 0.1.0
 Authors@R: person("Simon", "Schoenbuchner", email = "sms86@cam.ac.uk",
   role = c("aut", "cre"))
-Description: More about what it does (maybe more than one line)
-    Use four spaces when indenting paragraphs within the Description.
+Description: Merge R2BGLiMS::JAM results for two distinct traits, for posterior
+    inference about shared genetic variants associated with both traits.
 License: GPL-3 + file LICENSE
 Encoding: UTF-8
 LazyData: true
@@ -17,5 +17,6 @@ Imports:
     reshape2 (>= 1.4.4),
     ggplot2 (>= 3.3.2),
     stringr (>= 1.4.0),
-    tidyr (>= 1.1.2)
-Remotes: github::pjnewcombe/R2BGLiMS
+    tidyr (>= 1.1.2),
+    devtools (>= 2.3.2)
+Remotes: pjnewcombe/R2BGLiMS
