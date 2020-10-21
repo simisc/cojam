@@ -3,6 +3,9 @@
 
 # cojam
 
+[![Build
+Status](https://travis-ci.com/simisc/cojam.svg?branch=master)](https://travis-ci.com/simisc/cojam)
+
 Multi-variant colocalisation with summary genetic association data.
 Merge
 [R2BGLiMS](https://github.com/pjnewcombe/R2BGLiMS "R2BGLiMS")`::JAM()`
