@@ -114,7 +114,9 @@ jam_models <- function(jam_res) {
 #'   binomial co-efficient). For use in calculating the implied prior (under
 #'   independence between traits) in \code{cojam}.
 #'
-#' @param jam_args
+#' @param jam_args A \code{list} of arguments to JAM for trait 1. This can be
+#'   conveniently constructed using \code{\link{jam_wrap}}. See \code{\link{jam_wrap}}
+#'   and \code{\link[R2BGLiMS]{JAM}} for details of the required arguments.
 #' @return Vector of the same length P (number of SNPs in \code{jam_args}),
 #'   containing prior probabilities for models of dimensions 0 to (P-1).
 model_size_priors <- function(jam_args) {
@@ -156,7 +158,7 @@ implied_prior <- function(jam_args_1, jam_args_2) {
     c(H012 = p_H0_U_H1_U_H2, H3 = p_H3, H4 = p_H3)
 }
 
-#' Merge two \code{\link{R2BGLiS::JAM}} models
+#' Merge two \code{\link[R2BGLiMS]{JAM}} models
 #'
 #' Combines samples from the posterior model space of two \code{\link[R2BGLiMS]{JAM}}
 #' models, allowing posterior inference about colocalisation, i.e. about the
@@ -250,7 +252,7 @@ cojam_odds <- function(cojam_res, prior_odds_43) {
         dplyr::mutate(posterior = prior * cojam_res$bayes_factor)
     cojam_res$posterior_odds_43 <- cojam_res$posterior_odds_43 %>%
         dplyr::bind_rows(add_posterior_odds_43) %>%
-        distinct()
+        dplyr::distinct()
     cojam_res
 }
 
@@ -263,20 +265,66 @@ cojam_odds <- function(cojam_res, prior_odds_43) {
 #' @export
 NULL
 
-logsum <- function(x) {
-    max_x <- max(x)
-    max_x + log(sum(exp(x - max_x)))
+#' Plot a correlation matrix
+#'
+#' Pretty correlation matrix with `ggplot`
+#'
+#' @param M Correlation matrix
+#' @export
+plot_cormat <- function(M) {
+    isSymmetric(M) || stop("Correlation matrix must be symmetric")
+
+    M %>%
+        reshape2::melt() %>%
+        ggplot2::ggplot() +
+        ggplot2::geom_raster(ggplot2::aes(Var1, stats::reorder(Var2, dplyr::desc(Var2)), fill = value)) +
+        ggplot2::theme(axis.title = ggplot2::element_blank(),
+                       axis.text.x = ggplot2::element_text(angle = 90)) +
+        ggplot2::scale_x_discrete(position = "top") +
+        ggplot2::scale_fill_gradient2(limits = c(-1, 1)) +
+        ggplot2::coord_fixed()
 }
 
+#' Convert DNA string to its complement
+#'
+#' Convert string of nucleotide codes to its complement
+#'
+#' @param x Character string of nucleotide code
+#' @return Character string of the complement of \code{x}
 #' @export
-tags <- function(genotypes_1, genotypes_2, threshold = 0.9) {
+complement_DNA <- function(x) {
 
-    vars <- intersect(colnames(genotypes_1),
-                      colnames(genotypes_2))
+    letters_x <- unlist(stringr::str_split(x, ""))
+    letters_DNA <- "ACGTMRWSYKVHDBN-" # from Biostrings::DNA_ALPHABET
 
-    r2a <- r2b <- genotypes_1[, vars] %>%
-        rbind(genotypes_2[, vars]) %>%
-        stats::cov()
+    if (!all(stringr::str_detect(letters_DNA, letters_x))) {
+        stop(sprintf("Acceptable input characters are %s", letters_DNA))
+    }
+
+    chartr(letters_DNA, "TGCAKYWSRMBDHVN-", x)
+}
+
+#' Hierarchical pruning of genotype matrix
+#'
+#' Find SNPs that "tag" groups of correlated SNPs by cutting a hierarchical
+#'   clustering tree at the specified threshold.
+#'
+#' @param genotypes_1 Genotype matrix, with SNP identifiers as column names.
+#' @param genotypes_2 Optional second genotype matrix, useful to jointly select
+#'   tag SNPs for use in \code{cojam}.
+#' @param threshold Correlation (height) at which to cut the hierarchical
+#'   clustering tree.
+#' @return Character vector of tag SNP identifiers.
+#' @export
+prune_tags <- function(genotypes_1, genotypes_2 = NULL, threshold = 0.9) {
+
+    if (!is.null(genotypes_2)) {
+        vars <- intersect(colnames(genotypes_1), colnames(genotypes_2))
+        genotypes_1 <- genotypes_1[, vars] %>%
+            rbind(genotypes_2[, vars])
+    }
+
+    r2a <- r2b <- stats::cov(genotypes_1)
 
     hc <- stats::hclust(stats::as.dist(1 - r2a), "single")
     clusters <- stats::cutree(hc, h = 1 - threshold ^ 2)
@@ -293,53 +341,29 @@ tags <- function(genotypes_1, genotypes_2, threshold = 0.9) {
         dplyr::pull(snp)
 }
 
-#' @export
-plot_cormat <- function(M) {
-    isSymmetric(M) || stop("Correlation matrix must be symmetric")
+#### Legacy functions ####
 
-    M %>%
-        reshape2::melt() %>%
-        ggplot2::ggplot() +
-        # ggplot2::geom_raster(aes(Var1, Var2, fill = value)) +
-        ggplot2::geom_raster(ggplot2::aes(Var1, stats::reorder(Var2, dplyr::desc(Var2)), fill = value)) +
-        ggplot2::theme(axis.title = ggplot2::element_blank(),
-                       axis.text.x = ggplot2::element_text(angle = 90)) +
-        ggplot2::scale_x_discrete(position = "top") +
-        ggplot2::scale_fill_gradient2(limits = c(-1, 1)) +
-        ggplot2::coord_fixed()
+logsum <- function(x) {
+    max_x <- max(x)
+    max_x + log(sum(exp(x - max_x)))
 }
 
-#' @export
-complement_DNA <- function(x) {
+prune_qr <- function(genotypes) {
 
-    letters_x <- unlist(stringr::str_split(x, ""))
-    letters_DNA <- "ACGTMRWSYKVHDBN-" # from Biostrings::DNA_ALPHABET
-
-    if (!all(stringr::str_detect(letters_DNA, letters_x))) {
-        stop(sprintf("Acceptable input characters are %s", letters_DNA))
-    }
-
-    chartr(letters_DNA, "TGCAKYWSRMBDHVN-", x)
-}
-
-#' @export
-prune_qr <- function(genotype_matrix) {
-
-    if (any(is.na(genotype_matrix))) {
-        n <- nrow(genotype_matrix)
-        genotype_matrix <- stats::na.omit(genotype_matrix)
+    if (any(is.na(genotypes))) {
+        n <- nrow(genotypes)
+        genotypes <- stats::na.omit(genotypes)
         message(sprintf(
             "Removing %i rows containing missing values (prune_qr).",
-            n - nrow(genotype_matrix)
+            n - nrow(genotypes)
         ))
     }
 
-    gm_qr <- qr(genotype_matrix)
-    genotype_matrix[, gm_qr$pivot[seq_len(gm_qr$rank)]]
+    gm_qr <- qr(genotypes)
+    genotypes[, gm_qr$pivot[seq_len(gm_qr$rank)]]
 }
 
-#' @export
-prune_pairwise <- function(genotypes, threshold = 0.8) {
+prune_pairwise <- function(genotypes, threshold = 0.9) {
 
     genotypes <- prune_qr(genotypes)
 

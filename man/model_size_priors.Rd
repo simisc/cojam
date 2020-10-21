@@ -6,6 +6,11 @@
 \usage{
 model_size_priors(jam_args)
 }
+\arguments{
+\item{jam_args}{A \code{list} of arguments to JAM for trait 1. This can be
+conveniently constructed using \code{\link{jam_wrap}}. See \code{\link{jam_wrap}}
+and \code{\link[R2BGLiMS]{JAM}} for details of the required arguments.}
+}
 \value{
 Vector of the same length P (number of SNPs in \code{jam_args}),
   containing prior probabilities for models of dimensions 0 to (P-1).

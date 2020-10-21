@@ -2,7 +2,7 @@
 % Please edit documentation in R/functions.R
 \name{cojam}
 \alias{cojam}
-\title{Merge two \code{\link{R2BGLiS::JAM}} models}
+\title{Merge two \code{\link[R2BGLiMS]{JAM}} models}
 \usage{
 cojam(jam_args_1, jam_args_2, prior_odds_43 = NA)
 }
