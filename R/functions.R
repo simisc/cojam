@@ -1,15 +1,54 @@
-jam_wrap <- function(marginal_beta, # _original_ betas (log ORs if binary outcome)
+#' Wrapper around \code{\link[R2BGLiMS]{JAM}}
+#'
+#' Constructs a list of arguments that can be passed to \code{\link[R2BGLiMS]{JAM}}
+#'   via \code{do.call}, or as an argument to \code{\link{cojam}}. The prior
+#'   proportion of causal covariates is treated as unknown and given a Beta(a, b)
+#'   hyper-prior.
+#'
+#' @param marginal_beta Vector of marginal effect estimates to re-analyse with
+#'   JAM under multivariate models. For GWAS summaries, these or _log-ORs_.
+#' @param snp_names SNP identifiers (e.g. RSID), in the same order as \code{marginal_beta}.
+#' @param ref_genotypes Reference genotype matrix used by JAM to impute the SNP-SNP
+#'   correlations. Individual's genotype must be coded as a numeric risk allele
+#'   count 0/1/2. Non-integer values reflecting imputation may be given. NB: The
+#'   risk allele coding MUST correspond to that used in marginal.betas. Must be
+#'   positive definite, with SNP identifiers in the column names.
+#' @param n The size of the dataset in which the summary statistics
+#'   \code{marginal.betas} were calculated
+#' @param trait_variance Estimate of the trait (outcome) variance.
+#' @param binary_outcome Is the trait (outcome) binary? Should be \code{TRUE} for
+#'   GWAS or \code{FALSE} for QTL studies.
+#' @param marginal_beta_se Only required if the trait (outcome) is binary:
+#'   standard errors of the log-ORs.
+#' @param bb_prior_a Parameter of Beta(a, b) prior on proportion of causal
+#'   covariates, default 1.
+#' @param bb_prior_b Parameter of Beta(a, b) prior on proportion of causal
+#'   covariates. Default is the number of SNPs that are common to both \code{snp_names}
+#'   and \code{colnames(ref_genotypes)}. Higher values of \code{bb_prior_b}
+#'   relative to \code{bb_prior_a} will encourage greater sparsity. Use
+#'   \code{\link[R2BGLiMS]{GetBetaBinomParams}} for suggested beta-binomial parameters.
+#' @param ... Other arguments to \code{\link[R2BGLiMS]{JAM}}.
+#' @return A list of arguments that can be passed to \code{\link[R2BGLiMS]{JAM}}
+#'   via \code{do.call}, or as an argument to \code{\link{cojam}}.
+#' @export
+jam_wrap <- function(marginal_beta,
                      snp_names,
                      ref_genotypes,
                      n,
                      trait_variance,
                      binary_outcome = FALSE,
-                     marginal_beta_se = NULL, # only required if binary outcome
-                     prior_lambda = 1) {      # temporary: need to rethink this!
+                     marginal_beta_se = NULL,
+                     bb_prior_a = 1,
+                     bb_prior_b = NULL,
+                     ...) {
+
+
+    variables <- intersect(snp_names, colnames(ref_genotypes)) # Add message if this results in loss of variables...
+    if (is.null(bb_prior_b)) {
+        bb_prior_b <- length(variables)
+    }
 
     names(marginal_beta) <- snp_names
-    variables <- intersect(snp_names, colnames(ref_genotypes)) # Add message if this results in loss of variables...
-
     marginal_beta <- marginal_beta[variables]
     ref_genotypes <- ref_genotypes[, variables]
 
@@ -37,11 +76,12 @@ jam_wrap <- function(marginal_beta, # _original_ betas (log ORs if binary outcom
          n = n,
          trait.variance = trait_variance,
          model.space.prior = list(
-             a = 1,
-             b = prior_lambda * length(variables),
+             a = bb_prior_a,
+             b = bb_prior_b,
              Variables = variables
          ),
-         extra.arguments = extra_arguments)
+         extra.arguments = extra_arguments,
+         ...)
 }
 
 jam_models <- function(jam_res) {
@@ -68,18 +108,20 @@ jam_models <- function(jam_res) {
                       model_rank = dplyr::row_number())
 }
 
-# Calculates a Beta-Binomial prior probability for a SPECIFIC model. From Bottolo et al.
-# This is not the prior on a particular dimension (that would required the binomial co-efficient).
-# k dimension of specific model
-# n total number of covariates
-# a beta-binomial hyper parameter a
-# b beta-binomial hyper parameter b
-# returns Probability
+#' Beta-Binomial probabilities for specific models
+#'
+#' This is not the prior on a particular dimension (that would required the
+#'   binomial co-efficient). For use in calculating the implied prior (under
+#'   independence between traits) in \code{cojam}.
+#'
+#' @param jam_args
+#' @return Vector of the same length P (number of SNPs in \code{jam_args}),
+#'   containing prior probabilities for models of dimensions 0 to (P-1).
 model_size_priors <- function(jam_args) {
     a <- jam_args$model.space.prior$a
     b <- jam_args$model.space.prior$b
     n <- length(jam_args$model.space.prior$Variables)
-    k <- 0:(n - 1)
+    k <- 0:(n - 1) # dimension of specific model
     beta(k + a, n - k + b) / beta(a, b)
 }
 
@@ -114,8 +156,28 @@ implied_prior <- function(jam_args_1, jam_args_2) {
     c(H012 = p_H0_U_H1_U_H2, H3 = p_H3, H4 = p_H3)
 }
 
-# prior_odds_43 can be a vector of prior odds: p(H4) / p(H3)
-cojam <- function(jam_args_1, jam_args_2, prior_odds_43 = NA) {
+#' Merge two \code{\link{R2BGLiS::JAM}} models
+#'
+#' Combines samples from the posterior model space of two \code{\link[R2BGLiMS]{JAM}}
+#' models, allowing posterior inference about colocalisation, i.e. about the
+#' existence of one or more shared variants that are associated with both outcome
+#' traits.
+#'
+#' @param jam_args_1 A \code{list} of arguments to JAM for trait 1. This can be
+#'   conveniently constructed using \code{\link{jam_wrap}}. See \code{\link{jam_wrap}}
+#'   and \code{\link[R2BGLiMS]{JAM}} for details of the required arguments.
+#' @param jam_args_2 A \code{list} of arguments to JAM for trait 2.
+#' @param prior_odds_43 Optional (vector of) prior odds of a shared variant ("H4") versus
+#'   distinct variants ("H3"). Can also be added later using \code{\link{cojam_odds}}.
+#' @return A \code{list} containing the following elements:
+#'   \describe{
+#'       \item{\code{bayes_factor}:}{Bayes Factor for H4 versus H3.}
+#'       \item{\code{posterior_overlap}:}{Posterior probability of H4 U H3.}
+#'       \item{\code{posterior_odds_43}:}{If \code{prior_odds_43} are provided,
+#'       the posterior odds of H4 versus H3.}
+#'     }
+#' @export
+cojam <- function(jam_args_1, jam_args_2, prior_odds_43 = NA) { # prior_odds_43 can be a vector of prior odds: p(H4) / p(H3)
 
     vars <- jam_args_1$model.space.prior$Variables
 
@@ -169,7 +231,28 @@ cojam <- function(jam_args_1, jam_args_2, prior_odds_43 = NA) {
          posterior_odds_43 = posterior_odds_43)
 }
 
-#### Helpers ####
+#' Augment \code{\link{cojam}} results with other prior choices
+#'
+#' Calculate posterior odds of a shared variant ("H4") versus distinct variants ("H3")
+#'
+#' @param cojam_res Results from \code{\link{cojam}}
+#' @param prior_odds_43 Vector of prior odds of H4 versus H3.
+#' @return Same as \code{\link{cojam}}, a \code{list} containing the following elements:
+#'   \describe{
+#'       \item{\code{bayes_factor}:}{Bayes Factor for H4 versus H3.}
+#'       \item{\code{posterior_overlap}:}{Posterior probability of H4 U H3.}
+#'       \item{\code{posterior_odds_43}:}{Posterior odds of H4 versus H3, including
+#'       those already in \code{cojam_res} (if any) and new rows for new \code{prior_odds_43}.}
+#'     }
+#' @export
+cojam_odds <- function(cojam_res, prior_odds_43) {
+    add_posterior_odds_43 <- tibble::tibble(prior = prior_odds_43) %>%
+        dplyr::mutate(posterior = prior * cojam_res$bayes_factor)
+    cojam_res$posterior_odds_43 <- cojam_res$posterior_odds_43 %>%
+        dplyr::bind_rows(add_posterior_odds_43) %>%
+        distinct()
+    cojam_res
+}
 
 #' Pipe
 #'
@@ -185,6 +268,7 @@ logsum <- function(x) {
     max_x + log(sum(exp(x - max_x)))
 }
 
+#' @export
 tags <- function(genotypes_1, genotypes_2, threshold = 0.9) {
 
     vars <- intersect(colnames(genotypes_1),
@@ -209,6 +293,7 @@ tags <- function(genotypes_1, genotypes_2, threshold = 0.9) {
         dplyr::pull(snp)
 }
 
+#' @export
 plot_cormat <- function(M) {
     isSymmetric(M) || stop("Correlation matrix must be symmetric")
 
@@ -224,6 +309,7 @@ plot_cormat <- function(M) {
         ggplot2::coord_fixed()
 }
 
+#' @export
 complement_DNA <- function(x) {
 
     letters_x <- unlist(stringr::str_split(x, ""))
@@ -236,6 +322,7 @@ complement_DNA <- function(x) {
     chartr(letters_DNA, "TGCAKYWSRMBDHVN-", x)
 }
 
+#' @export
 prune_qr <- function(genotype_matrix) {
 
     if (any(is.na(genotype_matrix))) {
@@ -251,6 +338,7 @@ prune_qr <- function(genotype_matrix) {
     genotype_matrix[, gm_qr$pivot[seq_len(gm_qr$rank)]]
 }
 
+#' @export
 prune_pairwise <- function(genotypes, threshold = 0.8) {
 
     genotypes <- prune_qr(genotypes)
