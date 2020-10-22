@@ -19,7 +19,7 @@ jam_wrap(
 }
 \arguments{
 \item{marginal_beta}{Vector of marginal effect estimates to re-analyse with
-JAM under multivariate models. For GWAS summaries, these or _log-ORs_.}
+JAM under multivariate models. For GWAS summaries, these or \emph{log-ORs}.}
 
 \item{snp_names}{SNP identifiers (e.g. RSID), in the same order as \code{marginal_beta}.}
 
@@ -52,11 +52,11 @@ relative to \code{bb_prior_a} will encourage greater sparsity. Use
 \item{...}{Other arguments to \code{\link[R2BGLiMS]{JAM}}.}
 }
 \value{
-A list of arguments that can be passed to \code{\link[R2BGLiMS]{JAM}}
-  via \code{do.call}, or as an argument to \code{\link{cojam}}.
+A collated list of data that can be passed to \code{\link[R2BGLiMS]{JAM}}
+  via \code{do.call}.
 }
 \description{
-Constructs a list of arguments that can be passed to \code{\link[R2BGLiMS]{JAM}}
+Constructs a collated list of data that can be passed to \code{\link[R2BGLiMS]{JAM}}
   via \code{do.call}, or as an argument to \code{\link{cojam}}. The prior
   proportion of causal covariates is treated as unknown and given a Beta(a, b)
   hyper-prior.

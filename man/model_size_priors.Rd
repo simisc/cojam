@@ -4,15 +4,14 @@
 \alias{model_size_priors}
 \title{Beta-Binomial probabilities for specific models}
 \usage{
-model_size_priors(jam_args)
+model_size_priors(jam_res)
 }
 \arguments{
-\item{jam_args}{A \code{list} of arguments to JAM for trait 1. This can be
-conveniently constructed using \code{\link{jam_wrap}}. See \code{\link{jam_wrap}}
-and \code{\link[R2BGLiMS]{JAM}} for details of the required arguments.}
+\item{jam_res}{A \code{\link[R2BGLiMS]{R2BGLiMS_Results-class}} object,
+from running \code{\link[R2BGLiMS]{JAM}}.}
 }
 \value{
-Vector of the same length P (number of SNPs in \code{jam_args}),
+Vector of the same length P (number of SNPs in \code{jam_res}),
   containing prior probabilities for models of dimensions 0 to (P-1).
 }
 \description{

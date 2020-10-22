@@ -4,16 +4,16 @@
 \alias{cojam}
 \title{Merge two \code{\link[R2BGLiMS]{JAM}} models}
 \usage{
-cojam(jam_args_1, jam_args_2, prior_odds_43 = NA)
+cojam(jam_res_1, jam_res_2, prior_odds_43 = NA)
 }
 \arguments{
-\item{jam_args_1}{A \code{list} of arguments to JAM for trait 1. This can be
-conveniently constructed using \code{\link{jam_wrap}}. See \code{\link{jam_wrap}}
-and \code{\link[R2BGLiMS]{JAM}} for details of the required arguments.}
+\item{jam_res_1}{A \code{\link[R2BGLiMS]{R2BGLiMS_Results-class}} object,
+from running \code{\link[R2BGLiMS]{JAM}} for trait 1.}
 
-\item{jam_args_2}{A \code{list} of arguments to JAM for trait 2.}
+\item{jam_res_2}{A \code{\link[R2BGLiMS]{R2BGLiMS_Results-class}} object,
+from running \code{\link[R2BGLiMS]{JAM}} for trait 2.}
 
-\item{prior_odds_43}{Optional (vector of) prior odds of a shared variant ("H4") versus
+\item{prior_odds_43}{Optional vector of prior odds of a shared variant ("H4") versus
 distinct variants ("H3"). Can also be added later using \code{\link{cojam_odds}}.}
 }
 \value{

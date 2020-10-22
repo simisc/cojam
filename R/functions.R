@@ -1,12 +1,12 @@
 #' Wrapper around \code{\link[R2BGLiMS]{JAM}}
 #'
-#' Constructs a list of arguments that can be passed to \code{\link[R2BGLiMS]{JAM}}
+#' Constructs a collated list of data that can be passed to \code{\link[R2BGLiMS]{JAM}}
 #'   via \code{do.call}, or as an argument to \code{\link{cojam}}. The prior
 #'   proportion of causal covariates is treated as unknown and given a Beta(a, b)
 #'   hyper-prior.
 #'
 #' @param marginal_beta Vector of marginal effect estimates to re-analyse with
-#'   JAM under multivariate models. For GWAS summaries, these or _log-ORs_.
+#'   JAM under multivariate models. For GWAS summaries, these or \emph{log-ORs}.
 #' @param snp_names SNP identifiers (e.g. RSID), in the same order as \code{marginal_beta}.
 #' @param ref_genotypes Reference genotype matrix used by JAM to impute the SNP-SNP
 #'   correlations. Individual's genotype must be coded as a numeric risk allele
@@ -28,8 +28,8 @@
 #'   relative to \code{bb_prior_a} will encourage greater sparsity. Use
 #'   \code{\link[R2BGLiMS]{GetBetaBinomParams}} for suggested beta-binomial parameters.
 #' @param ... Other arguments to \code{\link[R2BGLiMS]{JAM}}.
-#' @return A list of arguments that can be passed to \code{\link[R2BGLiMS]{JAM}}
-#'   via \code{do.call}, or as an argument to \code{\link{cojam}}.
+#' @return A collated list of data that can be passed to \code{\link[R2BGLiMS]{JAM}}
+#'   via \code{do.call}.
 #' @export
 jam_wrap <- function(marginal_beta,
                      snp_names,
@@ -85,26 +85,13 @@ jam_wrap <- function(marginal_beta,
 }
 
 jam_models <- function(jam_res) {
-
-    msp <- jam_res@model.space.priors[[1]]
-
-    if (jam_res@enumerate.up.to.dim > 0) {
-        stop("Not yet implemented for enumerated JAM models.")
-        # names(msp$Variables) <- msp$Variables
-        # model_probs <- jam_res@enumerated.posterior.inference$model.probs
-        # restab <- map_dfr(msp$Variables, function(v) {
-        #     stringr::str_detect(names(model_probs), v)
-        # })
-        # restab$posterior <- model_probs
-    }
-
     jam_res@mcmc.output %>%
         tibble::as_tibble() %>%
         dplyr::select(-alpha, -LogLikelihood) %>%
         dplyr::group_by_all() %>%
         dplyr::summarise(posterior = dplyr::n(), .groups = "drop") %>%
         dplyr::arrange(dplyr::desc(posterior)) %>%
-        dplyr::mutate(model_size = rowSums(.[, msp$Variables]),
+        dplyr::mutate(model_size = rowSums(.[, jam_res@model.space.prior$Variables]),
                       model_rank = dplyr::row_number())
 }
 
@@ -114,29 +101,24 @@ jam_models <- function(jam_res) {
 #'   binomial co-efficient). For use in calculating the implied prior (under
 #'   independence between traits) in \code{cojam}.
 #'
-#' @param jam_args A \code{list} of arguments to JAM for trait 1. This can be
-#'   conveniently constructed using \code{\link{jam_wrap}}. See \code{\link{jam_wrap}}
-#'   and \code{\link[R2BGLiMS]{JAM}} for details of the required arguments.
-#' @return Vector of the same length P (number of SNPs in \code{jam_args}),
+#' @param jam_res A \code{\link[R2BGLiMS]{R2BGLiMS_Results-class}} object,
+#'   from running \code{\link[R2BGLiMS]{JAM}}.
+#' @return Vector of the same length P (number of SNPs in \code{jam_res}),
 #'   containing prior probabilities for models of dimensions 0 to (P-1).
-model_size_priors <- function(jam_args) {
-    a <- jam_args$model.space.prior$a
-    b <- jam_args$model.space.prior$b
-    n <- length(jam_args$model.space.prior$Variables)
+model_size_priors <- function(jam_res) {
+    a <- jam_res$model.space.prior$a
+    b <- jam_res$model.space.prior$b
+    n <- length(jam_res$model.space.prior$Variables)
     k <- 0:(n - 1) # dimension of specific model
     beta(k + a, n - k + b) / beta(a, b)
 }
 
-implied_prior <- function(jam_args_1, jam_args_2) {
+implied_prior <- function(jam_res_1, jam_res_2) {
 
-    if (!identical(jam_args_1$model.space.prior$Variables, jam_args_2$model.space.prior$Variables)) {
-        stop("JAM calls must include identical variables. Use tag() to find a suitable set of SNPs.")
-    }
+    n_snps <- length(jam_res_1$model.space.prior$Variables)
 
-    n_snps <- length(jam_args_1$model.space.prior$Variables)
-
-    model_priors1 <- model_size_priors(jam_args_1)
-    model_priors2 <- model_size_priors(jam_args_2)
+    model_priors1 <- model_size_priors(jam_res_1)
+    model_priors2 <- model_size_priors(jam_res_2)
 
     # p_H0 <- model_priors_1[1] * model_priors_2[1]
     # p_H1 <- model_priors_2[1] - p_H0
@@ -165,11 +147,11 @@ implied_prior <- function(jam_args_1, jam_args_2) {
 #' existence of one or more shared variants that are associated with both outcome
 #' traits.
 #'
-#' @param jam_args_1 A \code{list} of arguments to JAM for trait 1. This can be
-#'   conveniently constructed using \code{\link{jam_wrap}}. See \code{\link{jam_wrap}}
-#'   and \code{\link[R2BGLiMS]{JAM}} for details of the required arguments.
-#' @param jam_args_2 A \code{list} of arguments to JAM for trait 2.
-#' @param prior_odds_43 Optional (vector of) prior odds of a shared variant ("H4") versus
+#' @param jam_res_1 A \code{\link[R2BGLiMS]{R2BGLiMS_Results-class}} object,
+#'   from running \code{\link[R2BGLiMS]{JAM}} for trait 1.
+#' @param jam_res_2 A \code{\link[R2BGLiMS]{R2BGLiMS_Results-class}} object,
+#'   from running \code{\link[R2BGLiMS]{JAM}} for trait 2.
+#' @param prior_odds_43 Optional vector of prior odds of a shared variant ("H4") versus
 #'   distinct variants ("H3"). Can also be added later using \code{\link{cojam_odds}}.
 #' @return A \code{list} containing the following elements:
 #'   \describe{
@@ -179,19 +161,19 @@ implied_prior <- function(jam_args_1, jam_args_2) {
 #'       the posterior odds of H4 versus H3.}
 #'     }
 #' @export
-cojam <- function(jam_args_1, jam_args_2, prior_odds_43 = NA) { # prior_odds_43 can be a vector of prior odds: p(H4) / p(H3)
+cojam <- function(jam_res_1, jam_res_2, prior_odds_43 = NA) {
 
-    vars <- jam_args_1$model.space.prior$Variables
+    vars <- jam_res_1$model.space.prior$Variables
 
-    if (!identical(vars, jam_args_2$model.space.prior$Variables)) {
+    identical(vars, jam_res_2$model.space.prior$Variables) &&
         stop("JAM calls must include identical variables. Use tag() to find a suitable set of SNPs.")
-    }
+    (jam_res_1@enumerate.up.to.dim > 0 | jam_res_2@enumerate.up.to.dim > 0) &&
+        stop("Not yet implemented for enumerated JAM models.")
+    (jam_res_1@n.covariate.blocks.for.jam > 1 | jam_res_2@n.covariate.blocks.for.jam > 1) &&
+        stop("Not yet implemented for multiple covariate blocks.")
 
-    jam_res1 <- do.call(R2BGLiMS::JAM, jam_args_1)
-    jam_res2 <- do.call(R2BGLiMS::JAM, jam_args_2)
-
-    jam_tab1 <- jam_models(jam_res1)
-    jam_tab2 <- jam_models(jam_res2)
+    jam_tab1 <- jam_models(jam_res_1)
+    jam_tab2 <- jam_models(jam_res_2)
 
     posterior_counts <- tcrossprod(as.matrix(jam_tab1[, vars]),
                                    as.matrix(jam_tab2[, vars])) %>%
@@ -217,7 +199,7 @@ cojam <- function(jam_args_1, jam_args_2, prior_odds_43 = NA) { # prior_odds_43 
         dplyr::summarise(posterior = sum(posterior, na.rm = TRUE), .groups = "drop") %>%
         dplyr::pull(posterior, name = hypoth)
 
-    prior_probs_implied <- implied_prior(jam_args_1, jam_args_2)
+    prior_probs_implied <- implied_prior(jam_res_1, jam_res_2)
     prior_odds_34_implied <- prior_probs_implied["H3"] / prior_probs_implied["H4"]
 
     posterior_overlap <- sum(posterior_counts[c("H3", "H4")]) / sum(posterior_counts)
