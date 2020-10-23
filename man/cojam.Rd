@@ -19,10 +19,21 @@ distinct variants ("H3"). Can also be added later using \code{\link{cojam_odds}}
 \value{
 A \code{list} containing the following elements:
   \describe{
-      \item{\code{bayes_factor}:}{Bayes Factor for H4 versus H3.}
-      \item{\code{posterior_overlap}:}{Posterior probability of H4 U H3.}
-      \item{\code{posterior_odds_43}:}{If \code{prior_odds_43} are provided,
+      \item{\code{bayes_factor}}{Bayes Factor for H4 versus H3.}
+      \item{\code{posterior_overlap}}{Posterior probability of H4 U H3.}
+      \item{\code{posterior_odds_43}}{If \code{prior_odds_43} are provided,
       the posterior odds of H4 versus H3.}
+      \item{\code{model_info}}{
+      \describe{Extra info for other functions / post-processing:
+        \item{\code{models_grid}}{All sampled configurations (joint
+          \code{\link[R2BGLiMS]{JAM}} models) and their posterior counts.}
+        \item{\code{implied_prior_odds_43}}{Prior odds of H4 versus H3 that would
+          have been implied under an assumption of independence between traits.
+          Provided as a sanity check for user-supplied priors, which should
+          usually promote H4 vs H3 (i.e. user supplied \code{prior_odds_43}
+          should usually be greater than \code{implied_prior_odds_43}).}
+        }
+      }
     }
 }
 \description{

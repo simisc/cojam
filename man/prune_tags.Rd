@@ -10,7 +10,7 @@ prune_tags(genotypes_1, genotypes_2 = NULL, threshold = 0.9)
 \item{genotypes_1}{Genotype matrix, with SNP identifiers as column names.}
 
 \item{genotypes_2}{Optional second genotype matrix, useful to jointly select
-tag SNPs for use in \code{cojam}.}
+tag SNPs for \code{cojam}.}
 
 \item{threshold}{Correlation (height) at which to cut the hierarchical
 clustering tree.}

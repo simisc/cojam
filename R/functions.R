@@ -154,12 +154,21 @@ implied_prior <- function(jam_res_1, jam_res_2) {
 #'   distinct variants ("H3"). Can also be added later using \code{\link{cojam_odds}}.
 #' @return A \code{list} containing the following elements:
 #'   \describe{
-#'       \item{\code{bayes_factor}:}{Bayes Factor for H4 versus H3.}
-#'       \item{\code{posterior_overlap}:}{Posterior probability of H4 U H3.}
-#'       \item{\code{posterior_odds_43}:}{If \code{prior_odds_43} are provided,
+#'       \item{\code{bayes_factor}}{Bayes Factor for H4 versus H3.}
+#'       \item{\code{posterior_overlap}}{Posterior probability of H4 U H3.}
+#'       \item{\code{posterior_odds_43}}{If \code{prior_odds_43} are provided,
 #'       the posterior odds of H4 versus H3.}
-#'       \item{\code{models_grid}:}{All samples configurations (joint
-#'         \code{\link[R2BGLiMS]{JAM}} models) with posterior counts.}
+#'       \item{\code{model_info}}{
+#'       \describe{Extra info for other functions / post-processing:
+#'         \item{\code{models_grid}}{All sampled configurations (joint
+#'           \code{\link[R2BGLiMS]{JAM}} models) and their posterior counts.}
+#'         \item{\code{implied_prior_odds_43}}{Prior odds of H4 versus H3 that would
+#'           have been implied under an assumption of independence between traits.
+#'           Provided as a sanity check for user-supplied priors, which should
+#'           usually promote H4 vs H3 (i.e. user supplied \code{prior_odds_43}
+#'           should usually be greater than \code{implied_prior_odds_43}).}
+#'         }
+#'       }
 #'     }
 #' @export
 cojam <- function(jam_res_1, jam_res_2, prior_odds_43 = NA) {
@@ -207,13 +216,20 @@ cojam <- function(jam_res_1, jam_res_2, prior_odds_43 = NA) {
 
     bayes_factor <- posterior_odds_43_implied * prior_odds_34_implied
 
+    all(prior_odds_43 > 1 / prior_odds_34_implied) ||
+        warning("Supplied prior promotes H3 vs H4, compared to implied prior odds under independence")
+
     posterior_odds_43 <- tibble::tibble(prior = prior_odds_43) %>%
         dplyr::mutate(posterior = prior * bayes_factor)
 
+    # To do: Define a class for this output.
+    #        Model info can be slots / attributes?
+    #        Current list will also print too much.
     list(bayes_factor = bayes_factor,
          posterior_overlap = posterior_overlap,
          posterior_odds_43 = posterior_odds_43,
-         models_grid = models_grid)
+         model_info = list(grid = models_grid,
+                           implied_prior_odds_43 = 1 / prior_odds_34_implied))
 }
 
 #' Augment \code{\link{cojam}} results with other prior choices
@@ -231,6 +247,10 @@ cojam <- function(jam_res_1, jam_res_2, prior_odds_43 = NA) {
 #'     }
 #' @export
 cojam_odds <- function(cojam_res, prior_odds_43) {
+
+    all(prior_odds_43 > cojam_res$model_info$implied_prior_odds_43) ||
+        warning("Supplied prior promotes H3 vs H4, compared to implied prior odds under independence")
+
     add_posterior_odds_43 <- tibble::tibble(prior = prior_odds_43) %>%
         dplyr::mutate(posterior = prior * cojam_res$bayes_factor)
     cojam_res$posterior_odds_43 <- cojam_res$posterior_odds_43 %>%
@@ -244,6 +264,44 @@ plot_shared_variants <- function(cojam_res) {
     # Manhattan plot for PP of shared variant(s) *given* H4
     # Have partial code for this somewhere...
     # ggplot2::theme_classic() + ggplot2::theme(panel.border = element_rect(fill = NA))
+}
+
+convert_coloc_prior <- function(n_snps, p12 = 1e-05, p1 = 1e-04, p2 = 1e-04) {
+
+    # Using new coloc prior setup (Wallace 2020), work out what prior odds should be
+}
+
+convert_coloc_data <- function(coloc_data, ref_genotypes) {
+
+    # Convert coloc data to JAM arguments
+
+    # Make all variable names start with a letter and no ":" (required by R2BGLiMS) — add check, only change if needed
+    # colnames(ref_genotypes) <- sprintf("c%s", str_replace(colnames(ref_genotypes), ":", "p"))
+    # coloc_data$snp <- sprintf("c%s", str_replace(coloc_data$snp, ":", "p"))
+
+    if (coloc_data$type == "cc") {
+        if (length(coloc_data$N > 1)) {
+            coloc_data$s <- stats::weighted.mean(coloc_data$s, coloc_data$N)
+            coloc_data$N <- sum(coloc_data$N)
+        }
+        args <- list(
+            marginal_beta_se = sqrt(coloc_data$varbeta),
+            trait_variance = coloc_data$s * (1 - coloc_data$s),
+            binary_outcome = TRUE
+        )
+    } else if (coloc_data$type == "quant") {
+        args <- list(
+            trait_variance = coloc_data$sdY ^ 2,
+            binary_outcome = FALSE
+        )
+    } else {
+        stop("type not recognised")
+    }
+    do.call(jam_wrap, c(args,
+                        marginal_beta = coloc_data$beta,
+                        ref_genotypes = ref_genotypes,
+                        snp_names = coloc_data$snp,
+                        n = coloc_data$N))
 }
 
 #' Pipe
@@ -272,7 +330,7 @@ plot_cormat <- function(M) {
         ggplot2::theme_classic() +
         ggplot2::theme(axis.title = ggplot2::element_blank(),
                        axis.text.x = ggplot2::element_text(angle = 90),
-                       panel.border = element_rect(fill = NA)) +
+                       panel.border = ggplot2::element_rect(fill = NA)) +
         ggplot2::scale_x_discrete(position = "top") +
         ggplot2::scale_fill_gradient2(limits = c(-1, 1)) +
         ggplot2::coord_fixed()
@@ -303,7 +361,7 @@ complement_DNA <- function(x) {
 #'
 #' @param genotypes_1 Genotype matrix, with SNP identifiers as column names.
 #' @param genotypes_2 Optional second genotype matrix, useful to jointly select
-#'   tag SNPs for use in \code{cojam}.
+#'   tag SNPs for \code{cojam}.
 #' @param threshold Correlation (height) at which to cut the hierarchical
 #'   clustering tree.
 #' @return Character vector of tag SNP identifiers.
