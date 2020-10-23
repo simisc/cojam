@@ -175,8 +175,8 @@ cojam <- function(jam_res_1, jam_res_2, prior_odds_43 = NA) {
     jam_tab1 <- jam_models(jam_res_1)
     jam_tab2 <- jam_models(jam_res_2)
 
-    posterior_counts <- tcrossprod(as.matrix(jam_tab1[, vars]),
-                                   as.matrix(jam_tab2[, vars])) %>%
+    models_grid <- tcrossprod(as.matrix(jam_tab1[, vars]),
+                              as.matrix(jam_tab2[, vars])) %>%
         reshape2::melt(varnames = c("model_rank_1", "model_rank_2"),
                        value.name = "num_coloc") %>%
         tibble::as_tibble() %>%
@@ -190,11 +190,10 @@ cojam <- function(jam_res_1, jam_res_2, prior_odds_43 = NA) {
                 model_size_1 == 0 | model_size_2 == 0 ~ "H012",
                 num_coloc == 0 ~ "H3",
                 TRUE ~ "H4"),
-            posterior = posterior_1 * posterior_2
-        ) %>%
-        dplyr::full_join(
-            tibble::tibble(hypoth = c("H012", "H3", "H4"), by = "hypoth")
-        ) %>%
+            posterior = posterior_1 * posterior_2)
+
+    posterior_counts <- tibble::tibble(hypoth = c("H012", "H3", "H4"), by = "hypoth") %>%
+        dplyr::full_join(models_grid) %>%
         dplyr::group_by(hypoth) %>%
         dplyr::summarise(posterior = sum(posterior, na.rm = TRUE), .groups = "drop") %>%
         dplyr::pull(posterior, name = hypoth)
@@ -212,7 +211,8 @@ cojam <- function(jam_res_1, jam_res_2, prior_odds_43 = NA) {
 
     list(bayes_factor = bayes_factor,
          posterior_overlap = posterior_overlap,
-         posterior_odds_43 = posterior_odds_43)
+         posterior_odds_43 = posterior_odds_43,
+         models_grid = models_grid)
 }
 
 #' Augment \code{\link{cojam}} results with other prior choices
@@ -238,6 +238,13 @@ cojam_odds <- function(cojam_res, prior_odds_43) {
     cojam_res
 }
 
+plot_shared_variants <- function(cojam_res) {
+    # Manhattan plots for trait 1 and trait 2
+    # Manhattan plot for PP of shared variant(s) *given* H4
+    # Have partial code for this somewhere...
+    # ggplot2::theme_classic() + ggplot2::theme(panel.border = element_rect(fill = NA))
+}
+
 #' Pipe
 #'
 #' Imported from \code{\link[magrittr]{pipe}}
@@ -260,8 +267,10 @@ plot_cormat <- function(M) {
         reshape2::melt() %>%
         ggplot2::ggplot() +
         ggplot2::geom_raster(ggplot2::aes(Var1, stats::reorder(Var2, dplyr::desc(Var2)), fill = value)) +
+        ggplot2::theme_classic() +
         ggplot2::theme(axis.title = ggplot2::element_blank(),
-                       axis.text.x = ggplot2::element_text(angle = 90)) +
+                       axis.text.x = ggplot2::element_text(angle = 90),
+                       panel.border = element_rect(fill = NA)) +
         ggplot2::scale_x_discrete(position = "top") +
         ggplot2::scale_fill_gradient2(limits = c(-1, 1)) +
         ggplot2::coord_fixed()

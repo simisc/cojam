@@ -25,9 +25,11 @@ devtools::install_github("simisc/cojam")
 GWAS are generally analysed one SNP at a time, generating summary data
 that obscure the presence of causal variants because many SNPs in
 linkage disequilibrium (LD) with the causal SNP will also have
-significant associations. JAM is a scalable fine-mapping algorithm to
-identify candidate causal SNPs that best explain the joint pattern of
-single-SNP summary associations ([Newcombe et al. 2016 *Genetic
+significant associations.
+[JAM](https://github.com/pjnewcombe/R2BGLiMS "R2BGLiMS package") is a
+scalable fine-mapping algorithm to identify candidate causal SNPs that
+best explain the joint pattern of single-SNP summary associations
+([Newcombe et al. 2016 *Genetic
 Epidemiology*](https://doi.org/10.1002/gepi.21953 "JAM paper 1"),
 [Newcombe et al. 2018 *Genetic
 Epidemiology*](https://doi.org/10.1002/gepi.22245 "JAM paper 2")). The
@@ -41,7 +43,7 @@ existence of joint causal variants. Building on the colocalisation
 framework used in [coloc](https://github.com/chr1swallace/coloc "coloc")
 ([Giambartolomei et al. 2014 *PLOS
 Genetics*](https://doi.org/10.1371/journal.pgen.1004383 "coloc paper 1"),
-[Wallace et al. 2020 *PLOS
+[Wallace 2020 *PLOS
 Genetics*](https://doi.org/10.1371/journal.pgen.1008720 "coloc paper 2")),
 cojam assigns joint models for the two traits to one of five mutually
 exclusive hypotheses. The two hypotheses of interest are:
@@ -52,15 +54,19 @@ exclusive hypotheses. The two hypotheses of interest are:
     shared SNP
 
 In cojam, support for H<sub>4</sub> over H<sub>3</sub> is quantified by
-the Bayes Factor, *BF* = p(D|H<sub>4</sub>) / p(D|H<sub>3</sub>),
-i.e. ratio of likelihoods. This is estimated by dividing the posterior
-odds of H<sub>4</sub>:H<sub>3</sub> (based on JAM’s independent rjMCMC
-posterior samples) by their prior odds (calculated combinatorially,
-assuming independence between traits).
+the Bayes Factor (likelihood ratio), *BF* = p(D|H<sub>4</sub>) /
+p(D|H<sub>3</sub>) = PosteriorOdds\[H<sub>4</sub>:H<sub>3</sub>\] /
+PriorOdds\[H<sub>4</sub>:H<sub>3</sub>\]. The posterior odds are
+estimated from JAM’s independent rjMCMC posterior samples; the prior
+odds are calculated combinatorially, also assuming independence between
+traits, and taking into account the (potentially different) priors on
+the proportion of causal variants in each JAM model. The effects of the
+independence assumption on the prior and posterior odds cancel out in
+the *BF*.
 
 When two traits both have genetic drivers in the same region, this
 suggests some relationship between the traits. For a chosen prior odds
-of H<sub>4</sub>:H<sub>3</sub> (reflecting the assumed dependence
+of H<sub>4</sub> against H<sub>3</sub> (reflecting the dependence
 between colocalised traits), multiplying by *BF* provides the resulting
 posterior odds.
 
