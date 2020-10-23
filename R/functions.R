@@ -56,9 +56,8 @@ jam_wrap <- function(marginal_beta,
 
     if (binary_outcome) {
 
-        if (is.null(marginal_beta_se)) {
+        is.null(marginal_beta_se) &&
             stop("For binary outcomes, supply marginal_beta_se: std errors of the log-ORs")
-        }
 
         names(marginal_beta_se) <- snp_names
         marginal_beta_se <- marginal_beta_se[variables]
@@ -159,17 +158,19 @@ implied_prior <- function(jam_res_1, jam_res_2) {
 #'       \item{\code{posterior_overlap}:}{Posterior probability of H4 U H3.}
 #'       \item{\code{posterior_odds_43}:}{If \code{prior_odds_43} are provided,
 #'       the posterior odds of H4 versus H3.}
+#'       \item{\code{models_grid}:}{All samples configurations (joint
+#'         \code{\link[R2BGLiMS]{JAM}} models) with posterior counts.}
 #'     }
 #' @export
 cojam <- function(jam_res_1, jam_res_2, prior_odds_43 = NA) {
 
     vars <- jam_res_1$model.space.prior$Variables
 
-    identical(vars, jam_res_2$model.space.prior$Variables) &&
+    identical(vars, jam_res_2$model.space.prior$Variables) ||
         stop("JAM calls must include identical variables. Use tag() to find a suitable set of SNPs.")
-    (jam_res_1@enumerate.up.to.dim > 0 | jam_res_2@enumerate.up.to.dim > 0) &&
+    (jam_res_1@enumerate.up.to.dim == 0 & jam_res_2@enumerate.up.to.dim == 0) ||
         stop("Not yet implemented for enumerated JAM models.")
-    (jam_res_1@n.covariate.blocks.for.jam > 1 | jam_res_2@n.covariate.blocks.for.jam > 1) &&
+    (jam_res_1@n.covariate.blocks.for.jam == 1 & jam_res_2@n.covariate.blocks.for.jam == 1) ||
         stop("Not yet implemented for multiple covariate blocks.")
 
     jam_tab1 <- jam_models(jam_res_1)
@@ -261,6 +262,7 @@ NULL
 #' @param M Correlation matrix
 #' @export
 plot_cormat <- function(M) {
+
     isSymmetric(M) || stop("Correlation matrix must be symmetric")
 
     M %>%
@@ -288,9 +290,8 @@ complement_DNA <- function(x) {
     letters_x <- unlist(stringr::str_split(x, ""))
     letters_DNA <- "ACGTMRWSYKVHDBN-" # from Biostrings::DNA_ALPHABET
 
-    if (!all(stringr::str_detect(letters_DNA, letters_x))) {
+    all(stringr::str_detect(letters_DNA, letters_x)) ||
         stop(sprintf("Acceptable input characters are %s", letters_DNA))
-    }
 
     chartr(letters_DNA, "TGCAKYWSRMBDHVN-", x)
 }
