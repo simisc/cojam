@@ -43,7 +43,10 @@ jam_wrap <- function(marginal_beta,
                      ...) {
 
 
-    variables <- intersect(snp_names, colnames(ref_genotypes)) # Add message if this results in loss of variables...
+    snp_names <- vctrs::vec_as_names(snp_names, repair = "universal")
+    colnames(ref_genotypes) <- vctrs::vec_as_names(colnames(ref_genotypes), repair = "universal")
+    variables <- intersect(snp_names, colnames(ref_genotypes))
+
     if (is.null(bb_prior_b)) {
         bb_prior_b <- length(variables)
     }
@@ -74,7 +77,7 @@ jam_wrap <- function(marginal_beta,
          X.ref = ref_genotypes,
          n = n,
          trait.variance = trait_variance,
-         model.space.prior = list(
+         model.space.priors = list(
              a = bb_prior_a,
              b = bb_prior_b,
              Variables = variables
@@ -90,7 +93,7 @@ jam_models <- function(jam_res) {
         dplyr::group_by_all() %>%
         dplyr::summarise(posterior = dplyr::n(), .groups = "drop") %>%
         dplyr::arrange(dplyr::desc(posterior)) %>%
-        dplyr::mutate(model_size = rowSums(.[, jam_res@model.space.prior$Variables]),
+        dplyr::mutate(model_size = rowSums(.[, jam_res@model.space.priors[[1]]$Variables]),
                       model_rank = dplyr::row_number())
 }
 
@@ -105,16 +108,16 @@ jam_models <- function(jam_res) {
 #' @return Vector of the same length P (number of SNPs in \code{jam_res}),
 #'   containing prior probabilities for models of dimensions 0 to (P-1).
 model_size_priors <- function(jam_res) {
-    a <- jam_res$model.space.prior$a
-    b <- jam_res$model.space.prior$b
-    n <- length(jam_res$model.space.prior$Variables)
+    a <- jam_res@model.space.priors[[1]]$a
+    b <- jam_res@model.space.priors[[1]]$b
+    n <- length(jam_res@model.space.priors[[1]]$Variables)
     k <- 0:(n - 1) # dimension of specific model
     beta(k + a, n - k + b) / beta(a, b)
 }
 
 implied_prior <- function(jam_res_1, jam_res_2) {
 
-    n_snps <- length(jam_res_1$model.space.prior$Variables)
+    n_snps <- length(jam_res_1@model.space.priors[[1]]$Variables)
 
     model_priors1 <- model_size_priors(jam_res_1)
     model_priors2 <- model_size_priors(jam_res_2)
@@ -173,9 +176,9 @@ implied_prior <- function(jam_res_1, jam_res_2) {
 #' @export
 cojam <- function(jam_res_1, jam_res_2, prior_odds_43 = NA) {
 
-    vars <- jam_res_1$model.space.prior$Variables
+    vars <- jam_res_1@model.space.priors[[1]]$Variables
 
-    identical(vars, jam_res_2$model.space.prior$Variables) ||
+    identical(vars, jam_res_2@model.space.priors[[1]]$Variables) ||
         stop("JAM calls must include identical variables. Use tag() to find a suitable set of SNPs.")
     (jam_res_1@enumerate.up.to.dim == 0 & jam_res_2@enumerate.up.to.dim == 0) ||
         stop("Not yet implemented for enumerated JAM models.")
@@ -275,10 +278,6 @@ convert_coloc_data <- function(coloc_data, ref_genotypes) {
 
     # Convert coloc data to JAM arguments
 
-    # Make all variable names start with a letter and no ":" (required by R2BGLiMS) — add check, only change if needed
-    # colnames(ref_genotypes) <- sprintf("c%s", str_replace(colnames(ref_genotypes), ":", "p"))
-    # coloc_data$snp <- sprintf("c%s", str_replace(coloc_data$snp, ":", "p"))
-
     if (coloc_data$type == "cc") {
         if (length(coloc_data$N > 1)) {
             coloc_data$s <- stats::weighted.mean(coloc_data$s, coloc_data$N)
@@ -297,11 +296,11 @@ convert_coloc_data <- function(coloc_data, ref_genotypes) {
     } else {
         stop("type not recognised")
     }
-    do.call(jam_wrap, c(args,
-                        marginal_beta = coloc_data$beta,
-                        ref_genotypes = ref_genotypes,
-                        snp_names = coloc_data$snp,
-                        n = coloc_data$N))
+
+    do.call(jam_wrap, c(args, list(marginal_beta = coloc_data$beta,
+                                   ref_genotypes = ref_genotypes,
+                                   snp_names = coloc_data$snp,
+                                   n = coloc_data$N)))
 }
 
 #' Pipe
@@ -374,7 +373,7 @@ prune_tags <- function(genotypes_1, genotypes_2 = NULL, threshold = 0.9) {
             rbind(genotypes_2[, vars])
     }
 
-    r2a <- r2b <- stats::cov(genotypes_1)
+    r2a <- r2b <- stats::cor(genotypes_1) ^ 2
 
     hc <- stats::hclust(stats::as.dist(1 - r2a), "single")
     clusters <- stats::cutree(hc, h = 1 - threshold ^ 2)
