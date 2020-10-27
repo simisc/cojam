@@ -4,7 +4,7 @@
 \alias{cojam}
 \title{Merge two \code{\link[R2BGLiMS]{JAM}} models}
 \usage{
-cojam(jam_res_1, jam_res_2, prior_odds_43 = NA)
+cojam(jam_res_1, jam_res_2)
 }
 \arguments{
 \item{jam_res_1}{A \code{\link[R2BGLiMS]{R2BGLiMS_Results-class}} object,
@@ -12,17 +12,12 @@ from running \code{\link[R2BGLiMS]{JAM}} for trait 1.}
 
 \item{jam_res_2}{A \code{\link[R2BGLiMS]{R2BGLiMS_Results-class}} object,
 from running \code{\link[R2BGLiMS]{JAM}} for trait 2.}
-
-\item{prior_odds_43}{Optional vector of prior odds of a shared variant ("H4") versus
-distinct variants ("H3"). Can also be added later using \code{\link{cojam_odds}}.}
 }
 \value{
 A \code{list} containing the following elements:
   \describe{
       \item{\code{bayes_factor}}{Bayes Factor for H4 versus H3.}
       \item{\code{posterior_overlap}}{Posterior probability of H4 U H3.}
-      \item{\code{posterior_odds_43}}{If \code{prior_odds_43} are provided,
-      the posterior odds of H4 versus H3.}
       \item{\code{model_info}}{
       \describe{Extra info for other functions / post-processing:
         \item{\code{models_grid}}{All sampled configurations (joint

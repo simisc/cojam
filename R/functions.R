@@ -119,8 +119,8 @@ implied_prior <- function(jam_res_1, jam_res_2) {
 
     n_snps <- length(jam_res_1@model.space.priors[[1]]$Variables)
 
-    model_priors1 <- model_size_priors(jam_res_1)
-    model_priors2 <- model_size_priors(jam_res_2)
+    model_priors_1 <- model_size_priors(jam_res_1)
+    model_priors_2 <- model_size_priors(jam_res_2)
 
     # p_H0 <- model_priors_1[1] * model_priors_2[1]
     # p_H1 <- model_priors_2[1] - p_H0
@@ -139,7 +139,7 @@ implied_prior <- function(jam_res_1, jam_res_2) {
 
     p_H4 <- 1 - p_H0_U_H1_U_H2 - p_H3
 
-    c(H012 = p_H0_U_H1_U_H2, H3 = p_H3, H4 = p_H3)
+    c(H012 = p_H0_U_H1_U_H2, H3 = p_H3, H4 = p_H4)
 }
 
 #' Merge two \code{\link[R2BGLiMS]{JAM}} models
@@ -153,14 +153,10 @@ implied_prior <- function(jam_res_1, jam_res_2) {
 #'   from running \code{\link[R2BGLiMS]{JAM}} for trait 1.
 #' @param jam_res_2 A \code{\link[R2BGLiMS]{R2BGLiMS_Results-class}} object,
 #'   from running \code{\link[R2BGLiMS]{JAM}} for trait 2.
-#' @param prior_odds_43 Optional vector of prior odds of a shared variant ("H4") versus
-#'   distinct variants ("H3"). Can also be added later using \code{\link{cojam_odds}}.
 #' @return A \code{list} containing the following elements:
 #'   \describe{
 #'       \item{\code{bayes_factor}}{Bayes Factor for H4 versus H3.}
 #'       \item{\code{posterior_overlap}}{Posterior probability of H4 U H3.}
-#'       \item{\code{posterior_odds_43}}{If \code{prior_odds_43} are provided,
-#'       the posterior odds of H4 versus H3.}
 #'       \item{\code{model_info}}{
 #'       \describe{Extra info for other functions / post-processing:
 #'         \item{\code{models_grid}}{All sampled configurations (joint
@@ -174,7 +170,7 @@ implied_prior <- function(jam_res_1, jam_res_2) {
 #'       }
 #'     }
 #' @export
-cojam <- function(jam_res_1, jam_res_2, prior_odds_43 = NA) {
+cojam <- function(jam_res_1, jam_res_2) {
 
     vars <- jam_res_1@model.space.priors[[1]]$Variables
 
@@ -185,8 +181,10 @@ cojam <- function(jam_res_1, jam_res_2, prior_odds_43 = NA) {
     (jam_res_1@n.covariate.blocks.for.jam == 1 & jam_res_2@n.covariate.blocks.for.jam == 1) ||
         stop("Not yet implemented for multiple covariate blocks.")
 
-    jam_tab1 <- jam_models(jam_res_1)
-    jam_tab2 <- jam_models(jam_res_2)
+    jam_tab1 <- jam_models(jam_res_1) %>%
+        dplyr::rename(model_rank_1 = model_rank)
+    jam_tab2 <- jam_models(jam_res_2) %>%
+        dplyr::rename(model_rank_2 = model_rank)
 
     models_grid <- tcrossprod(as.matrix(jam_tab1[, vars]),
                               as.matrix(jam_tab2[, vars])) %>%
@@ -206,7 +204,7 @@ cojam <- function(jam_res_1, jam_res_2, prior_odds_43 = NA) {
             posterior = posterior_1 * posterior_2)
 
     posterior_counts <- tibble::tibble(hypoth = c("H012", "H3", "H4"), by = "hypoth") %>%
-        dplyr::full_join(models_grid) %>%
+        dplyr::full_join(models_grid, by = "hypoth") %>%
         dplyr::group_by(hypoth) %>%
         dplyr::summarise(posterior = sum(posterior, na.rm = TRUE), .groups = "drop") %>%
         dplyr::pull(posterior, name = hypoth)
@@ -219,20 +217,13 @@ cojam <- function(jam_res_1, jam_res_2, prior_odds_43 = NA) {
 
     bayes_factor <- posterior_odds_43_implied * prior_odds_34_implied
 
-    all(prior_odds_43 > 1 / prior_odds_34_implied) ||
-        warning("Supplied prior promotes H3 vs H4, compared to implied prior odds under independence")
-
-    posterior_odds_43 <- tibble::tibble(prior = prior_odds_43) %>%
-        dplyr::mutate(posterior = prior * bayes_factor)
-
     # To do: Define a class for this output.
     #        Model info can be slots / attributes?
     #        Current list will also print too much.
-    list(bayes_factor = bayes_factor,
+    list(bayes_factor = unname(bayes_factor),
          posterior_overlap = posterior_overlap,
-         posterior_odds_43 = posterior_odds_43,
          model_info = list(grid = models_grid,
-                           implied_prior_odds_43 = 1 / prior_odds_34_implied))
+                           implied_prior_odds_43 = unname(1 / prior_odds_34_implied)))
 }
 
 #' Augment \code{\link{cojam}} results with other prior choices
@@ -241,25 +232,19 @@ cojam <- function(jam_res_1, jam_res_2, prior_odds_43 = NA) {
 #'
 #' @param cojam_res Results from \code{\link{cojam}}
 #' @param prior_odds_43 Vector of prior odds of H4 versus H3.
-#' @return Same as \code{\link{cojam}}, a \code{list} containing the following elements:
-#'   \describe{
-#'       \item{\code{bayes_factor}:}{Bayes Factor for H4 versus H3.}
-#'       \item{\code{posterior_overlap}:}{Posterior probability of H4 U H3.}
-#'       \item{\code{posterior_odds_43}:}{Posterior odds of H4 versus H3, including
-#'       those already in \code{cojam_res} (if any) and new rows for new \code{prior_odds_43}.}
-#'     }
+#' @return A \code{\link[tibble]{tibble}} of prior and posterior odds of H4
+#'   versus H3, and posterior probabilities of H3 and H4.
 #' @export
-cojam_odds <- function(cojam_res, prior_odds_43) {
+posterior_summaries <- function(cojam_res, prior_odds_43) {
 
-    all(prior_odds_43 > cojam_res$model_info$implied_prior_odds_43) ||
+    if (any(prior_odds_43 < cojam_res$model_info$implied_prior_odds_43)) {
         warning("Supplied prior promotes H3 vs H4, compared to implied prior odds under independence")
+    }
 
-    add_posterior_odds_43 <- tibble::tibble(prior = prior_odds_43) %>%
-        dplyr::mutate(posterior = prior * cojam_res$bayes_factor)
-    cojam_res$posterior_odds_43 <- cojam_res$posterior_odds_43 %>%
-        dplyr::bind_rows(add_posterior_odds_43) %>%
-        dplyr::distinct()
-    cojam_res
+    tibble::tibble(prior_odds_43 = prior_odds_43) %>%
+        dplyr::mutate(posterior_odds_43 = prior_odds_43 * cojam_res$bayes_factor,
+                      posterior_prob_4 = cojam_res$posterior_overlap *
+                          posterior_odds_43 / (1 + posterior_odds_43))
 }
 
 plot_shared_variants <- function(cojam_res) {
@@ -446,4 +431,5 @@ utils::globalVariables(c("LogLikelihood", "Var1", "Var2", "alpha", "avg_cor", "g
                          "h3_combos", "h3_prior", "hypoth", "i", "j", "label",
                          "model_priors_1", "model_priors_2", "num_NAs", "posterior",
                          "posterior_1", "posterior_2", "prior", "prior_1", "prior_2",
-                         "r2_between", "r2_within", "snp", "value", "."))
+                         "r2_between", "r2_within", "snp", "value", ".",
+                         "posterior_odds_43", "model_rank"))
