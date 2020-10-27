@@ -461,8 +461,8 @@ prune_pairwise <- function(genotypes, threshold = 0.9) {
 # to appease R CMD check
 utils::globalVariables(c("LogLikelihood", "Var1", "Var2", "alpha", "avg_cor", "group",
                          "h3_combos", "h3_prior", "hypoth", "i", "j", "label",
-                         "model_priors_1", "model_priors_2", "num_NAs", "posterior",
-                         "posterior_1", "posterior_2", "prior", "prior_1", "prior_2",
+                         "num_NAs", "posterior",
+                         "posterior_1", "posterior_2", "prior_1", "prior_2",
                          "r2_between", "r2_within", "snp", "value", ".",
                          "posterior_odds_43", "model_rank", "marginal_posterior",
                          "model_rank_1", "model_rank_2", "model_size", "type"))
