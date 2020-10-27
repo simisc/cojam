@@ -41,7 +41,7 @@ In cojam, support for H<sub>4</sub> over H<sub>3</sub> is quantified by the Baye
 
 When two traits both have genetic drivers in the same region, this suggests some relationship between the traits. For a chosen prior odds of H<sub>4</sub> against H<sub>3</sub> (reflecting the dependence between colocalised traits), multiplying by _BF_ provides the resulting posterior odds.
 
-**Caution**: The current version of cojam does not include methods for assessing whether merged chains have efficiently searched the joint model space, or for visualising/diagnosing the results. Both JAM models should be thoroughly checked before passing them to cojam, using methods provided in [R2BGLiMS](https://github.com/pjnewcombe/R2BGLiMS "R2BGLiMS package")
+**Caution**: The current version of cojam does not include methods for assessing whether merged chains have efficiently searched the joint model space, or for visualising multi-SNP results. Both JAM models should be thoroughly checked before passing them to cojam, using methods provided in [R2BGLiMS](https://github.com/pjnewcombe/R2BGLiMS "R2BGLiMS package")
 
 ## Example
 

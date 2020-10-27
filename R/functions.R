@@ -90,11 +90,12 @@ jam_models <- function(jam_res) {
     jam_res@mcmc.output %>%
         tibble::as_tibble() %>%
         dplyr::select(-alpha, -LogLikelihood) %>%
+        dplyr::mutate_all(as.integer) %>%
+        dplyr::mutate(model_size = rowSums(.)) %>%
         dplyr::group_by_all() %>%
         dplyr::summarise(posterior = dplyr::n(), .groups = "drop") %>%
         dplyr::arrange(dplyr::desc(posterior)) %>%
-        dplyr::mutate(model_size = rowSums(.[, jam_res@model.space.priors[[1]]$Variables]),
-                      model_rank = dplyr::row_number())
+        dplyr::mutate(model_rank = dplyr::row_number())
 }
 
 #' Beta-Binomial probabilities for specific models
@@ -247,13 +248,6 @@ posterior_summaries <- function(cojam_res, prior_odds_43) {
                           posterior_odds_43 / (1 + posterior_odds_43))
 }
 
-plot_shared_variants <- function(cojam_res) {
-    # Manhattan plots for trait 1 and trait 2
-    # Manhattan plot for PP of shared variant(s) *given* H4
-    # Have partial code for this somewhere...
-    # ggplot2::theme_classic() + ggplot2::theme(panel.border = element_rect(fill = NA))
-}
-
 convert_coloc_prior <- function(n_snps, p12 = 1e-05, p1 = 1e-04, p2 = 1e-04) {
 
     # Using new coloc prior setup (Wallace 2020), work out what prior odds should be
@@ -375,7 +369,45 @@ prune_tags <- function(genotypes_1, genotypes_2 = NULL, threshold = 0.9) {
         dplyr::pull(snp)
 }
 
-#### Legacy functions ####
+plot_manhattan <- function(cojam_res) {
+
+    gr1 <- cojam_res$model_info$grid %>%
+        dplyr::select(dplyr::ends_with("_1"), -c(model_rank_1)) %>%
+        dplyr::rename_with(stringr::str_remove, pattern = "_1$") %>%
+        dplyr::mutate(posterior = posterior / sum(posterior))
+
+    gr2 <- cojam_res$model_info$grid %>%
+        dplyr::select(dplyr::ends_with("_2"), -c(model_rank_2)) %>%
+        dplyr::rename_with(stringr::str_remove, pattern = "_2$") %>%
+        dplyr::mutate(posterior = posterior / sum(posterior))
+
+    gr12 <- tibble::as_tibble(gr1 * gr2) %>%
+        dplyr::mutate(posterior = posterior / sum(posterior)) %>%
+        tidyr::pivot_longer(-c(posterior, model_size), names_to = "snp")
+
+    gr1 <- gr1 %>%
+        tidyr::pivot_longer(-c(posterior, model_size), names_to = "snp")
+
+    gr2 <- gr2 %>%
+        tidyr::pivot_longer(-c(posterior, model_size), names_to = "snp")
+
+    dplyr::bind_rows("Trait 1" = gr1,
+                     "Trait 2" = gr2,
+                     "Shared | H4" = gr12,
+                     .id = "type") %>%
+        dplyr::filter(model_size > 0) %>%
+        dplyr::mutate(type = factor(type, levels = c("Trait 1", "Trait 2", "Shared | H4"))) %>%
+        dplyr::group_by(type, snp) %>%
+        dplyr::summarise(marginal_posterior = sum(posterior * value), .groups = "drop_last") %>%
+        ggplot2::ggplot(ggplot2::aes(x = factor(snp), y = marginal_posterior)) +
+        ggplot2::geom_point() +
+        ggplot2::ylab("Marginal posterior probability") +
+        ggplot2::xlab("SNP") +
+        ggplot2::theme_classic() +
+        ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 90),
+                       panel.border = ggplot2::element_rect(fill = NA)) +
+        ggplot2::facet_grid(rows = "type")
+}
 
 logsum <- function(x) {
     max_x <- max(x)
@@ -432,4 +464,5 @@ utils::globalVariables(c("LogLikelihood", "Var1", "Var2", "alpha", "avg_cor", "g
                          "model_priors_1", "model_priors_2", "num_NAs", "posterior",
                          "posterior_1", "posterior_2", "prior", "prior_1", "prior_2",
                          "r2_between", "r2_within", "snp", "value", ".",
-                         "posterior_odds_43", "model_rank"))
+                         "posterior_odds_43", "model_rank", "marginal_posterior",
+                         "model_rank_1", "model_rank_2", "model_size", "type"))

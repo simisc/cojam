@@ -72,7 +72,7 @@ posterior odds.
 
 **Caution**: The current version of cojam does not include methods for
 assessing whether merged chains have efficiently searched the joint
-model space, or for visualising/diagnosing the results. Both JAM models
+model space, or for visualising multi-SNP results. Both JAM models
 should be thoroughly checked before passing them to cojam, using methods
 provided in
 [R2BGLiMS](https://github.com/pjnewcombe/R2BGLiMS "R2BGLiMS package")
