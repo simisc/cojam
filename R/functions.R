@@ -293,7 +293,7 @@ NULL
 
 #' Plot a correlation matrix
 #'
-#' Pretty correlation matrix with `ggplot`
+#' Pretty correlation matrix using \code{\link[ggplot2]{geom_raster}}
 #'
 #' @param M Correlation matrix
 #' @export
@@ -369,36 +369,43 @@ prune_tags <- function(genotypes_1, genotypes_2 = NULL, threshold = 0.9) {
         dplyr::pull(snp)
 }
 
+#' Plot marginal SNP posterior probability
+#'
+#' Three Manhattan plots: one for each trait (showing the marginal SNP posterior
+#'   probabilities), and one for the marginal posterior probabilities of each
+#'   SNP being shared for both traits.
+#'
+#' @param cojam_res Results from \code{\link{cojam}}
+#' @export
 plot_manhattan <- function(cojam_res) {
 
     gr1 <- cojam_res$model_info$grid %>%
-        dplyr::select(dplyr::ends_with("_1"), -c(model_rank_1)) %>%
+        dplyr::select(dplyr::ends_with("_1"), -c(model_rank_1, model_size_1)) %>%
         dplyr::rename_with(stringr::str_remove, pattern = "_1$") %>%
         dplyr::mutate(posterior = posterior / sum(posterior))
 
     gr2 <- cojam_res$model_info$grid %>%
-        dplyr::select(dplyr::ends_with("_2"), -c(model_rank_2)) %>%
+        dplyr::select(dplyr::ends_with("_2"), -c(model_rank_2, model_size_2)) %>%
         dplyr::rename_with(stringr::str_remove, pattern = "_2$") %>%
         dplyr::mutate(posterior = posterior / sum(posterior))
 
     gr12 <- tibble::as_tibble(gr1 * gr2) %>%
         dplyr::mutate(posterior = posterior / sum(posterior)) %>%
-        tidyr::pivot_longer(-c(posterior, model_size), names_to = "snp")
+        tidyr::pivot_longer(-c(posterior), names_to = "snp")
 
     gr1 <- gr1 %>%
-        tidyr::pivot_longer(-c(posterior, model_size), names_to = "snp")
+        tidyr::pivot_longer(-c(posterior), names_to = "snp")
 
     gr2 <- gr2 %>%
-        tidyr::pivot_longer(-c(posterior, model_size), names_to = "snp")
+        tidyr::pivot_longer(-c(posterior), names_to = "snp")
 
     dplyr::bind_rows("Trait 1" = gr1,
                      "Trait 2" = gr2,
                      "Shared | H4" = gr12,
                      .id = "type") %>%
-        dplyr::filter(model_size > 0) %>%
-        dplyr::mutate(type = factor(type, levels = c("Trait 1", "Trait 2", "Shared | H4"))) %>%
+        dplyr::mutate(type = factor(type, levels = c("Trait 1", "Trait 2", "Shared"))) %>%
         dplyr::group_by(type, snp) %>%
-        dplyr::summarise(marginal_posterior = sum(posterior * value), .groups = "drop_last") %>%
+        dplyr::summarise(marginal_posterior = sum(posterior * value), .groups = "drop") %>%
         ggplot2::ggplot(ggplot2::aes(x = factor(snp), y = marginal_posterior)) +
         ggplot2::geom_point() +
         ggplot2::ylab("Marginal posterior probability") +
@@ -459,10 +466,10 @@ prune_pairwise <- function(genotypes, threshold = 0.9) {
 }
 
 # to appease R CMD check
-utils::globalVariables(c("LogLikelihood", "Var1", "Var2", "alpha", "avg_cor", "group",
-                         "h3_combos", "h3_prior", "hypoth", "i", "j", "label",
-                         "num_NAs", "posterior",
-                         "posterior_1", "posterior_2", "prior_1", "prior_2",
-                         "r2_between", "r2_within", "snp", "value", ".",
-                         "posterior_odds_43", "model_rank", "marginal_posterior",
-                         "model_rank_1", "model_rank_2", "model_size", "type"))
+utils::globalVariables(c(
+    ".", "LogLikelihood", "Var1", "Var2", "alpha", "avg_cor", "group", "h3_combos", "h3_prior",
+    "hypoth", "i", "j", "label", "marginal_posterior", "model_rank", "model_rank_1",
+    "model_rank_2", "model_size_1", "model_size_2", "num_NAs", "posterior", "posterior_1",
+    "posterior_2", "posterior_odds_43", "prior_1", "prior_2", "r2_between", "r2_within",
+    "snp", "type", "value"
+))

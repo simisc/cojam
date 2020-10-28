@@ -10,5 +10,5 @@ plot_cormat(M)
 \item{M}{Correlation matrix}
 }
 \description{
-Pretty correlation matrix with `ggplot`
+Pretty correlation matrix using \code{\link[ggplot2]{geom_raster}}
 }
