@@ -24,9 +24,9 @@ JAM under multivariate models. For GWAS summaries, these or \emph{log-ORs}.}
 \item{snp_names}{SNP identifiers (e.g. RSID), in the same order as \code{marginal_beta}.}
 
 \item{ref_genotypes}{Reference genotype matrix used by JAM to impute the SNP-SNP
-correlations. Individual's genotype must be coded as a numeric risk allele
+correlations. Genotypes must be coded as a numeric risk allele
 count 0/1/2. Non-integer values reflecting imputation may be given. NB: The
-risk allele coding MUST correspond to that used in marginal.betas. Must be
+risk allele coding must correspond to that used in \code{marginal.betas}. Must be
 positive definite, with SNP identifiers in the column names.}
 
 \item{n}{The size of the dataset in which the summary statistics

@@ -2,7 +2,7 @@
 % Please edit documentation in R/functions.R
 \name{posterior_summaries}
 \alias{posterior_summaries}
-\title{Augment \code{\link{cojam}} results with other prior choices}
+\title{Posterior summaries from \code{\link{cojam}} results}
 \usage{
 posterior_summaries(cojam_res, prior_odds_43)
 }
@@ -16,5 +16,7 @@ A \code{\link[tibble]{tibble}} of prior and posterior odds of H4
   versus H3, and posterior probabilities of H3 and H4.
 }
 \description{
-Calculate posterior odds of a shared variant ("H4") versus distinct variants ("H3")
+Calculate posterior odds of a shared variant ("H4") versus distinct variants
+("H3"), and posterior probability of H4, given user-defined prior odds of H4
+versus H3.
 }

@@ -3,6 +3,7 @@
 export("%>%")
 export(cojam)
 export(complement_DNA)
+export(convert_coloc_data)
 export(jam_wrap)
 export(plot_cormat)
 export(plot_manhattan)

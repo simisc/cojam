@@ -9,9 +9,9 @@
 #'   JAM under multivariate models. For GWAS summaries, these or \emph{log-ORs}.
 #' @param snp_names SNP identifiers (e.g. RSID), in the same order as \code{marginal_beta}.
 #' @param ref_genotypes Reference genotype matrix used by JAM to impute the SNP-SNP
-#'   correlations. Individual's genotype must be coded as a numeric risk allele
+#'   correlations. Genotypes must be coded as a numeric risk allele
 #'   count 0/1/2. Non-integer values reflecting imputation may be given. NB: The
-#'   risk allele coding MUST correspond to that used in marginal.betas. Must be
+#'   risk allele coding must correspond to that used in \code{marginal.betas}. Must be
 #'   positive definite, with SNP identifiers in the column names.
 #' @param n The size of the dataset in which the summary statistics
 #'   \code{marginal.betas} were calculated
@@ -86,6 +86,16 @@ jam_wrap <- function(marginal_beta,
          ...)
 }
 
+#' Tabulate all models visited by \code{\link[R2BGLiMS]{JAM}}
+#'
+#' For internal use by \code{\link{cojam}}.
+#'
+#' @param jam_res A \code{\link[R2BGLiMS]{R2BGLiMS_Results-class}} object,
+#'   from running \code{\link[R2BGLiMS]{JAM}}.
+#' @return A \code{\link[tibble]{tibble}} with one row for each visited model,
+#'   with indicators showing inclusion of each SNP in that model, a count of
+#'   posterior samples of that model (i.e. how often the rjMCMC visited it),
+#'   and a ranking of the visited models.
 jam_models <- function(jam_res) {
     jam_res@mcmc.output %>%
         tibble::as_tibble() %>%
@@ -100,9 +110,9 @@ jam_models <- function(jam_res) {
 
 #' Beta-Binomial probabilities for specific models
 #'
-#' This is not the prior on a particular dimension (that would required the
-#'   binomial co-efficient). For use in calculating the implied prior (under
-#'   independence between traits) in \code{cojam}.
+#' For internal use by \code{\link{cojam}}.This is not the prior on a particular
+#'   dimension (that would required the binomial co-efficient). For use in
+#'   calculating the implied prior (under independence between traits) in \code{cojam}.
 #'
 #' @param jam_res A \code{\link[R2BGLiMS]{R2BGLiMS_Results-class}} object,
 #'   from running \code{\link[R2BGLiMS]{JAM}}.
@@ -116,6 +126,19 @@ model_size_priors <- function(jam_res) {
     beta(k + a, n - k + b) / beta(a, b)
 }
 
+#' Calculate implied priors for two independent \code{\link[R2BGLiMS]{JAM}} models
+#'
+#' For internal use by \code{\link{cojam}}. Uses combinatorics and each
+#'   \code{\link[R2BGLiMS]{JAM}} model's beta-binomial prior to calculate the prior
+#'   probabilities of each colocalisation hypothesis, given that the two traits
+#'   are independent. Used by \code{\link{cojam}} to calculate the Bayes
+#'   Factor for for H4 versus H3 (by factoring out this unrealistic implied prior).
+#'
+#' @param jam_res_1 A \code{\link[R2BGLiMS]{R2BGLiMS_Results-class}} object,
+#'   from running \code{\link[R2BGLiMS]{JAM}} for trait 1.
+#' @param jam_res_2 A \code{\link[R2BGLiMS]{R2BGLiMS_Results-class}} object,
+#'   from running \code{\link[R2BGLiMS]{JAM}} for trait 2.
+#' @return Named vector of implied prior probabilities for H0 U H1 U H2, H3 and H4.
 implied_prior <- function(jam_res_1, jam_res_2) {
 
     n_snps <- length(jam_res_1@model.space.priors[[1]]$Variables)
@@ -227,9 +250,11 @@ cojam <- function(jam_res_1, jam_res_2) {
                            implied_prior_odds_43 = unname(1 / prior_odds_34_implied)))
 }
 
-#' Augment \code{\link{cojam}} results with other prior choices
+#' Posterior summaries from \code{\link{cojam}} results
 #'
-#' Calculate posterior odds of a shared variant ("H4") versus distinct variants ("H3")
+#' Calculate posterior odds of a shared variant ("H4") versus distinct variants
+#' ("H3"), and posterior probability of H4, given user-defined prior odds of H4
+#' versus H3.
 #'
 #' @param cojam_res Results from \code{\link{cojam}}
 #' @param prior_odds_43 Vector of prior odds of H4 versus H3.
@@ -248,14 +273,19 @@ posterior_summaries <- function(cojam_res, prior_odds_43) {
                           posterior_odds_43 / (1 + posterior_odds_43))
 }
 
-convert_coloc_prior <- function(n_snps, p12 = 1e-05, p1 = 1e-04, p2 = 1e-04) {
-
-    # Using new coloc prior setup (Wallace 2020), work out what prior odds should be
-}
-
+#' Convert \code{\link[coloc]{coloc.abf}} data to \code{\link[R2BGLiMS]{JAM}} format
+#'
+#' Convert \code{\link[coloc]{coloc.abf}} data to the format required by
+#' \code{\link[R2BGLiMS]{JAM}}, using \code{\link{jam_wrap}}.
+#'
+#' @param coloc_data Data formatted for \code{\link[coloc]{coloc.abf}}
+#' @param ref_genotypes Reference genotype matrix used by JAM to impute the SNP-SNP
+#'   correlations. Genotypes must be coded as a numeric risk allele
+#'   count 0/1/2. Non-integer values reflecting imputation may be given. NB: The
+#'   risk allele coding must correspond to that used in \code{coloc_data}. Must be
+#'   positive definite, with SNP identifiers in the column names.
+#' @export
 convert_coloc_data <- function(coloc_data, ref_genotypes) {
-
-    # Convert coloc data to JAM arguments
 
     if (coloc_data$type == "cc") {
         if (length(coloc_data$N > 1)) {

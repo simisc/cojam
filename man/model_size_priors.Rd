@@ -15,7 +15,7 @@ Vector of the same length P (number of SNPs in \code{jam_res}),
   containing prior probabilities for models of dimensions 0 to (P-1).
 }
 \description{
-This is not the prior on a particular dimension (that would required the
-  binomial co-efficient). For use in calculating the implied prior (under
-  independence between traits) in \code{cojam}.
+For internal use by \code{\link{cojam}}.This is not the prior on a particular
+  dimension (that would required the binomial co-efficient). For use in
+  calculating the implied prior (under independence between traits) in \code{cojam}.
 }
