@@ -2,8 +2,10 @@ Package: cojam
 Type: Package
 Title: Multi-variant colocalisation with summary genetic association data
 Version: 0.4.2
-Authors@R: person("Simon", "Schoenbuchner", email = "sms86@cam.ac.uk",
-  role = c("aut", "cre"))
+Authors@R: person("Simon", "Schoenbuchner",
+  email = "sms86@cam.ac.uk",
+  role = c("aut", "cre"),
+  comment = c(ORCID = "0000-0003-4892-2170"))
 Description: Merge R2BGLiMS::JAM results for two distinct traits, for posterior
     inference about shared genetic variants associated with both traits.
 License: GPL-3 + file LICENSE
