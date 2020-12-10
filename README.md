@@ -7,6 +7,7 @@
 Status](https://travis-ci.com/simisc/cojam.svg?branch=master)](https://travis-ci.com/simisc/cojam)
 [![DOI](https://zenodo.org/badge/191818616.svg)](https://zenodo.org/badge/latestdoi/191818616)
 [![Licence](https://img.shields.io/github/license/simisc/cojam)](https://github.com/simisc/cojam/blob/master/LICENSE)
+[![Lifecycle](https://img.shields.io/badge/lifecycle-dormant-blue.svg)](https://www.tidyverse.org/lifecycle/#dormant)
 
 Multi-variant colocalisation with summary genetic association data.
 Merge [JAM](https://github.com/pjnewcombe/R2BGLiMS "R2BGLiMS package")
